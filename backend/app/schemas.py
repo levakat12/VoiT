@@ -74,6 +74,29 @@ class SearchResult(BaseModel):
     created_at: datetime
 
 
+class TranscriptChapter(BaseModel):
+    title: str
+    start: float
+    end: float
+    summary: str
+
+
+class SpeakerAnalytics(BaseModel):
+    speaker: str
+    segment_count: int
+    duration_seconds: float
+    word_count: int
+
+
+class TranscriptInsights(BaseModel):
+    job_id: int
+    cleaned_text: str
+    summary: str
+    chapters: list[TranscriptChapter]
+    keywords: list[str]
+    speaker_analytics: list[SpeakerAnalytics]
+
+
 class TranscriptUpdate(BaseModel):
     transcript_text: str
     segments: list[TranscriptSegment] | None = None
@@ -87,8 +110,23 @@ class OrganizationUpdate(BaseModel):
     is_archived: bool | None = None
 
 
+class OrganizationBulkUpdate(BaseModel):
+    job_ids: list[int]
+    update: OrganizationUpdate
+
+
+class OrganizationBulkResult(BaseModel):
+    updated_count: int
+    missing_job_ids: list[int]
+    jobs: list[JobRead]
+
+
 class UploadResponse(BaseModel):
     job: JobRead
+
+
+class UploadBatchResponse(BaseModel):
+    jobs: list[JobRead]
 
 
 ExportFormat = Literal["txt", "docx", "pdf", "json", "srt", "vtt"]
@@ -112,5 +150,6 @@ class SettingsRead(BaseModel):
     webhook_configured: bool
     supported_formats: list[str]
     export_formats: list[str]
+    insight_export_formats: list[str]
     storage_dir: str
     normalized_sample_rate: int

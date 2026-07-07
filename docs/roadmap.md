@@ -33,17 +33,25 @@ Next items:
 
 ## Phase 2: Professional Features
 
-- Batch uploads.
+Implemented:
+
+- Backend batch upload endpoint through `POST /api/uploads/batch`.
+- Browser desktop notifications when active jobs complete, fail, or are canceled.
+
+Next items:
+
 - Pause, resume, cancel, and retry.
-- Desktop notifications.
 
 ## Phase 3: AI Enhancement
 
-- Transcript cleanup.
-- Summaries.
-- Chapters.
-- Keyword extraction.
-- Speaker analytics.
+Implemented:
+
+- Local transcript cleanup, summaries, chapters, keyword extraction, and speaker analytics through `GET /api/jobs/{job_id}/insights`.
+- JSON, TXT, and Markdown insight exports through `GET /api/jobs/{job_id}/insights/exports/{format}`.
+
+Next items:
+
+- AI model-backed transcript cleanup and summaries.
 
 ## Phase 4: Search
 
@@ -51,10 +59,7 @@ Implemented:
 
 - Search across stored transcript text and timestamp segments through `GET /api/search?q=...`.
 - Search filters by date, project, tag, status, and media/file format.
-
-Next items:
-
-- Full-text indexes for large transcript libraries.
+- SQLite full-text indexes for larger transcript libraries.
 
 ## Phase 5: Organization
 
@@ -62,8 +67,8 @@ Implemented:
 
 - Project, folder, tags, favorite, and archive metadata for transcript jobs.
 - History filters for archived jobs, project, tag, and favorite state.
+- Bulk organization updates through `PATCH /api/jobs/organization/bulk`.
 
 Next items:
 
 - Dedicated organization UI.
-- Bulk organization actions.

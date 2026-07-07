@@ -18,13 +18,18 @@ from app.schemas import (
     ExportHistoryItem,
     JobListItem,
     JobRead,
+    OrganizationBulkResult,
+    OrganizationBulkUpdate,
     OrganizationUpdate,
     SearchResult,
+    TranscriptInsights,
     TranscriptSegment,
     TranscriptUpdate,
+    UploadBatchResponse,
     UploadResponse,
 )
 from app.services.exports import build_export
+from app.services.insights import build_insights_export, build_transcript_insights
 from app.services.media import (
     MediaValidationError,
     ensure_readable_media,
@@ -33,6 +38,7 @@ from app.services.media import (
     validate_media_file,
 )
 from app.services.parakeet import transcribe_media
+from app.services.search_index import delete_job_search_index, search_index_job_ids, sync_job_search_index
 from app.services.subtitles import SubtitleOptions
 from app.services.webhooks import deliver_job_webhook
 
@@ -51,6 +57,36 @@ async def upload_file(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> UploadResponse:
+    job = await _create_upload_job(file, db, settings)
+    background_tasks.add_task(process_job, job.id)
+    return UploadResponse(job=_job_to_schema(job))
+
+
+@router.post("/uploads/batch", response_model=UploadBatchResponse)
+async def upload_files_batch(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> UploadBatchResponse:
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one file is required.")
+    if len(files) > 50:
+        raise HTTPException(status_code=400, detail="Batch uploads are limited to 50 files.")
+
+    jobs = []
+    for file in files:
+        job = await _create_upload_job(file, db, settings)
+        jobs.append(job)
+        background_tasks.add_task(process_job, job.id)
+    return UploadBatchResponse(jobs=[_job_to_schema(job) for job in jobs])
+
+
+async def _create_upload_job(
+    file: UploadFile,
+    db: Session,
+    settings: Settings,
+) -> TranscriptJob:
     upload_dir = settings.storage_dir / "uploads"
     suffix = Path(file.filename or "upload").suffix.lower()
     stored_name = f"{uuid4().hex}{suffix}"
@@ -84,9 +120,35 @@ async def upload_file(
     db.add(job)
     db.commit()
     db.refresh(job)
+    return job
 
-    background_tasks.add_task(process_job, job.id)
-    return UploadResponse(job=_job_to_schema(job))
+
+@router.patch("/jobs/organization/bulk", response_model=OrganizationBulkResult)
+def bulk_update_organization(
+    request: OrganizationBulkUpdate,
+    db: Session = Depends(get_db),
+) -> OrganizationBulkResult:
+    job_ids = _unique_job_ids(request.job_ids)
+    if not job_ids:
+        raise HTTPException(status_code=400, detail="At least one job id is required.")
+    if len(job_ids) > 500:
+        raise HTTPException(status_code=400, detail="Bulk organization updates are limited to 500 jobs.")
+
+    jobs = db.scalars(select(TranscriptJob).where(TranscriptJob.id.in_(job_ids))).all()
+    jobs_by_id = {job.id: job for job in jobs}
+    for job_id in job_ids:
+        if job := jobs_by_id.get(job_id):
+            _apply_organization_update(job, request.update)
+
+    db.commit()
+    for job in jobs:
+        db.refresh(job)
+
+    return OrganizationBulkResult(
+        updated_count=len(jobs),
+        missing_job_ids=[job_id for job_id in job_ids if job_id not in jobs_by_id],
+        jobs=[_job_to_schema(job) for job in jobs],
+    )
 
 
 @router.get("/history", response_model=list[JobListItem])
@@ -139,7 +201,13 @@ def search_transcripts(
     if not query:
         raise HTTPException(status_code=400, detail="Search query cannot be empty.")
 
-    jobs = db.scalars(select(TranscriptJob).order_by(TranscriptJob.created_at.desc())).all()
+    indexed_job_ids = search_index_job_ids(db, query)
+    statement = select(TranscriptJob).order_by(TranscriptJob.created_at.desc())
+    if indexed_job_ids is not None:
+        if not indexed_job_ids:
+            return []
+        statement = statement.where(TranscriptJob.id.in_(indexed_job_ids))
+    jobs = db.scalars(statement).all()
     return [
         result
         for job in jobs
@@ -166,6 +234,37 @@ def get_job(job_id: int, db: Session = Depends(get_db)) -> JobRead:
     return _job_to_schema(job)
 
 
+@router.get("/jobs/{job_id}/insights", response_model=TranscriptInsights)
+def get_transcript_insights(job_id: int, db: Session = Depends(get_db)) -> TranscriptInsights:
+    return _build_transcript_insights_response(job_id, db)
+
+
+@router.get("/jobs/{job_id}/insights/exports/{export_format}")
+def export_transcript_insights(
+    job_id: int,
+    export_format: str,
+    db: Session = Depends(get_db),
+) -> Response:
+    insights = _build_transcript_insights_response(job_id, db)
+    try:
+        content, media_type, extension = build_insights_export(insights, export_format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    filename = f"job_{job_id}_insights.{extension}"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=content, media_type=media_type, headers=headers)
+
+
+def _build_transcript_insights_response(job_id: int, db: Session) -> TranscriptInsights:
+    job = db.get(TranscriptJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Transcript job not found.")
+    if job.status != JobStatus.completed or not job.transcript_text.strip():
+        raise HTTPException(status_code=409, detail="Transcript insights are not ready yet.")
+    return build_transcript_insights(job.id, job.transcript_text, _segments_from_job(job))
+
+
 @router.post("/jobs/{job_id}/retry", response_model=JobRead)
 def retry_job(
     job_id: int,
@@ -179,6 +278,7 @@ def retry_job(
         raise HTTPException(status_code=409, detail="Transcript job is already queued or running.")
 
     _reset_job_for_retry(job)
+    sync_job_search_index(db, job)
     db.commit()
     db.refresh(job)
     background_tasks.add_task(process_job, job.id)
@@ -195,16 +295,7 @@ def update_organization(
     if not job:
         raise HTTPException(status_code=404, detail="Transcript job not found.")
 
-    if update.project is not None:
-        job.project = update.project.strip()
-    if update.folder is not None:
-        job.folder = update.folder.strip()
-    if update.tags is not None:
-        job.tags_json = json.dumps(_normalize_tags(update.tags))
-    if update.is_favorite is not None:
-        job.is_favorite = update.is_favorite
-    if update.is_archived is not None:
-        job.is_archived = update.is_archived
+    _apply_organization_update(job, update)
 
     db.commit()
     db.refresh(job)
@@ -236,6 +327,7 @@ def delete_transcript(
         raise HTTPException(status_code=404, detail="Transcript job not found.")
 
     _delete_job_files(job, settings)
+    delete_job_search_index(db, job.id)
     db.delete(job)
     db.commit()
     return Response(status_code=204)
@@ -254,6 +346,7 @@ def update_transcript(
     job.transcript_text = update.transcript_text
     if update.segments is not None:
         job.segments_json = json.dumps([segment.model_dump() for segment in update.segments])
+    sync_job_search_index(db, job)
     db.commit()
     db.refresh(job)
     return _job_to_schema(job)
@@ -380,16 +473,19 @@ async def process_job(job_id: int) -> None:
             job.estimated_remaining_seconds = 0
             job.processing_speed = _processing_speed(job, elapsed, 100)
             job.error_message = ""
+            sync_job_search_index(db, job)
         except JobCanceled:
             _mark_job_canceled(job)
             _update_timing_metrics(job, started_at)
             job.estimated_remaining_seconds = None
+            sync_job_search_index(db, job)
         except Exception as exc:  # noqa: BLE001
             job.status = JobStatus.failed
             job.current_stage = "Failed"
             _update_timing_metrics(job, started_at)
             job.estimated_remaining_seconds = None
             job.error_message = str(exc)
+            sync_job_search_index(db, job)
         db.commit()
         await deliver_job_webhook(job, settings)
 
@@ -590,6 +686,29 @@ def _normalize_tags(tags: list[str]) -> list[str]:
             normalized.append(cleaned)
             seen.add(key)
     return normalized
+
+
+def _unique_job_ids(job_ids: list[int]) -> list[int]:
+    unique_ids = []
+    seen = set()
+    for job_id in job_ids:
+        if job_id > 0 and job_id not in seen:
+            unique_ids.append(job_id)
+            seen.add(job_id)
+    return unique_ids
+
+
+def _apply_organization_update(job: TranscriptJob, update: OrganizationUpdate) -> None:
+    if update.project is not None:
+        job.project = update.project.strip()
+    if update.folder is not None:
+        job.folder = update.folder.strip()
+    if update.tags is not None:
+        job.tags_json = json.dumps(_normalize_tags(update.tags))
+    if update.is_favorite is not None:
+        job.is_favorite = update.is_favorite
+    if update.is_archived is not None:
+        job.is_archived = update.is_archived
 
 
 def _job_matches_filters(

@@ -29,9 +29,11 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     from app import models  # noqa: F401
+    from app.services.search_index import init_search_index
 
     Base.metadata.create_all(bind=engine)
     _ensure_sqlite_columns()
+    init_search_index(engine)
 
 
 def _ensure_sqlite_columns() -> None:

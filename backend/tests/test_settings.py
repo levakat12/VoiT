@@ -18,6 +18,7 @@ def test_read_settings_does_not_expose_api_key() -> None:
     assert payload.api_configured is True
     assert payload.model == "parakeet-0.6b-tdt"
     assert payload.webhook_configured is True
+    assert payload.insight_export_formats == ["json", "txt", "md"]
     assert not hasattr(payload, "parakeet_api_key")
     assert not hasattr(payload, "webhook_url")
     assert not hasattr(payload, "webhook_secret")

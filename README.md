@@ -12,9 +12,11 @@ VoiT is an AI video and audio transcription platform. This repository starts the
 - Send normalized audio through a Parakeet/NVIDIA ASR-compatible service boundary.
 - Track current processing stage, progress percentage, processing time, ETA, speed, and export history.
 - Expose safe settings metadata without returning secrets.
-- Search across stored transcripts with matching snippets and metadata filters.
+- Search across stored transcripts with matching snippets, metadata filters, and a SQLite full-text index.
 - Organize jobs with project, folder, tags, favorite, and archive metadata.
 - Send optional signed webhooks when background transcription jobs finish.
+- Show browser desktop notifications when active jobs finish.
+- Generate local transcript insights: cleanup text, summary, chapters, keywords, and speaker analytics.
 - Use a development transcript fallback when no Parakeet API key is configured.
 - View, search, edit, save, and export transcripts.
 - Generate TXT, DOCX, PDF, JSON, SRT, and VTT exports.
@@ -88,13 +90,17 @@ VOIT_WEBHOOK_TIMEOUT_SECONDS=10
 - `GET /api/settings`
 - `POST /api/upload`
 - `POST /api/uploads`
+- `POST /api/uploads/batch`
 - `GET /api/history`
 - `GET /api/search?q={query}` with optional `project`, `tag`, `status`, `created_from`, `created_to`, `format`, and `include_archived` filters
 - `GET /api/jobs`
 - `GET /api/jobs/{job_id}`
+- `GET /api/jobs/{job_id}/insights`
+- `GET /api/jobs/{job_id}/insights/exports/{format}` where `format` is `json`, `txt`, or `md`
 - `POST /api/jobs/{job_id}/retry`
 - `POST /api/jobs/{job_id}/cancel`
 - `PATCH /api/jobs/{job_id}/organization`
+- `PATCH /api/jobs/organization/bulk`
 - `GET /api/transcript/{job_id}`
 - `DELETE /api/transcript/{job_id}`
 - `PATCH /api/jobs/{job_id}/transcript`

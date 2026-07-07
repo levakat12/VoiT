@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Loader2, Save, Upload } from "lucide-react";
 import { getJob, saveTranscript, uploadMedia } from "./api";
 import type { JobRead } from "./types";
@@ -9,9 +9,10 @@ export default function App() {
   const [isDirty, setDirty] = useState(false);
   const [isUploading, setUploading] = useState(false);
   const [message, setMessage] = useState("Ready");
+  const notifiedJobRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!job || job.status === "completed" || job.status === "failed") return;
+    if (!job || isFinalStatus(job.status)) return;
 
     const timer = window.setInterval(async () => {
       const nextJob = await getJob(job.id);
@@ -25,10 +26,20 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [isDirty, job]);
 
+  useEffect(() => {
+    if (!job || !isFinalStatus(job.status)) return;
+
+    const notificationKey = `${job.id}:${job.status}`;
+    if (notifiedJobRef.current === notificationKey) return;
+    notifiedJobRef.current = notificationKey;
+    showJobNotification(job);
+  }, [job]);
+
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
+    requestNotificationPermission();
     setUploading(true);
     setMessage("Uploading...");
     setDirty(false);
@@ -106,6 +117,10 @@ export default function App() {
   );
 }
 
+function isFinalStatus(status: JobRead["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "canceled";
+}
+
 function statusMessage(job: JobRead): string {
   if (job.status === "completed") return "Complete";
   if (job.status === "canceled") return "Canceled";
@@ -114,6 +129,27 @@ function statusMessage(job: JobRead): string {
     return `${job.current_stage} (${job.progress_percent}%)${metricMessage(job)}`;
   }
   return "Waiting...";
+}
+
+function requestNotificationPermission(): void {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  void Notification.requestPermission();
+}
+
+function showJobNotification(job: JobRead): void {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+  const body =
+    job.status === "completed"
+      ? `${job.filename} is ready.`
+      : job.status === "failed"
+        ? `${job.filename} failed: ${job.error_message || "Transcription failed."}`
+        : `${job.filename} was canceled.`;
+
+  new Notification("VoiT", {
+    body,
+    tag: `voit-job-${job.id}`,
+  });
 }
 
 function metricMessage(job: JobRead): string {

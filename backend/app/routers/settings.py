@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.config import Settings, get_settings
 from app.schemas import SettingsRead
+from app.services.insights import INSIGHT_EXPORT_FORMATS
 from app.services.media import SUPPORTED_EXTENSIONS
 
 router = APIRouter()
@@ -19,6 +20,7 @@ def read_settings(settings: Settings = Depends(get_settings)) -> SettingsRead:
         webhook_configured=bool(settings.webhook_url),
         supported_formats=sorted(SUPPORTED_EXTENSIONS),
         export_formats=["txt", "docx", "pdf", "json", "srt", "vtt"],
+        insight_export_formats=INSIGHT_EXPORT_FORMATS,
         storage_dir=str(settings.storage_dir),
         normalized_sample_rate=settings.normalized_sample_rate,
     )
