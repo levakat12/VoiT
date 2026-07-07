@@ -12,7 +12,7 @@ VoiT is an AI video and audio transcription platform. This repository starts the
 - Send normalized audio through a Parakeet/NVIDIA ASR-compatible service boundary.
 - Track current processing stage, progress percentage, processing time, and export history.
 - Expose safe settings metadata without returning secrets.
-- Search across stored transcripts with matching snippets.
+- Search across stored transcripts with matching snippets and metadata filters.
 - Organize jobs with project, folder, tags, favorite, and archive metadata.
 - Use a development transcript fallback when no Parakeet API key is configured.
 - View, search, edit, save, and export transcripts.
@@ -77,7 +77,7 @@ The default API shape follows NVIDIA Speech NIM's HTTP ASR endpoint, `POST /v1/a
 - `POST /api/upload`
 - `POST /api/uploads`
 - `GET /api/history`
-- `GET /api/search?q={query}`
+- `GET /api/search?q={query}` with optional `project`, `tag`, `status`, `created_from`, `created_to`, `format`, and `include_archived` filters
 - `GET /api/jobs`
 - `GET /api/jobs/{job_id}`
 - `POST /api/jobs/{job_id}/retry`

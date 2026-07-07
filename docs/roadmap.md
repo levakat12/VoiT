@@ -49,11 +49,11 @@ Next items:
 Implemented:
 
 - Search across stored transcript text and timestamp segments through `GET /api/search?q=...`.
+- Search filters by date, project, tag, status, and media/file format.
 
 Next items:
 
 - Full-text indexes for large transcript libraries.
-- Search filters by date, project, tag, or format.
 
 ## Phase 5: Organization
 

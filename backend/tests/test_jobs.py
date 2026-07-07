@@ -3,7 +3,9 @@ from datetime import UTC, datetime
 from app.models import JobStatus, TranscriptJob
 from app.routers.jobs import (
     _build_search_result,
+    _job_matches_format,
     _job_matches_filters,
+    _job_matches_search_filters,
     _mark_job_canceled,
     _normalize_tags,
     _reset_job_for_retry,
@@ -164,3 +166,63 @@ def test_archived_job_is_hidden_unless_requested() -> None:
 
     assert not _job_matches_filters(job, False, None, None, None)
     assert _job_matches_filters(job, True, None, None, None)
+
+
+def test_job_matches_search_filters_combines_metadata() -> None:
+    job = TranscriptJob(
+        filename="meeting.mp4",
+        media_type="video/mp4",
+        file_path="storage/uploads/meeting.mp4",
+        file_size=10,
+        status=JobStatus.completed,
+        project="Client A",
+        tags_json='["Budget"]',
+        is_archived=False,
+        created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 15, tzinfo=UTC),
+    )
+
+    assert _job_matches_search_filters(
+        job,
+        include_archived=False,
+        project="client a",
+        tag="budget",
+        status=JobStatus.completed,
+        created_from=datetime(2026, 1, 1, tzinfo=UTC),
+        created_to=datetime(2026, 1, 31, tzinfo=UTC),
+        format="mp4",
+    )
+    assert not _job_matches_search_filters(
+        job,
+        include_archived=False,
+        project="client a",
+        tag="budget",
+        status=JobStatus.failed,
+        created_from=None,
+        created_to=None,
+        format="mp4",
+    )
+    assert not _job_matches_search_filters(
+        job,
+        include_archived=False,
+        project="client a",
+        tag="budget",
+        status=JobStatus.completed,
+        created_from=datetime(2026, 2, 1, tzinfo=UTC),
+        created_to=None,
+        format="mp4",
+    )
+
+
+def test_job_matches_format_uses_extension_or_media_type() -> None:
+    job = TranscriptJob(
+        filename="meeting.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/meeting.wav",
+        file_size=10,
+    )
+
+    assert _job_matches_format(job, "wav")
+    assert _job_matches_format(job, ".wav")
+    assert _job_matches_format(job, "audio")
+    assert not _job_matches_format(job, "mp4")

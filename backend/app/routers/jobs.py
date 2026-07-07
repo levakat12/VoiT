@@ -124,6 +124,12 @@ def list_jobs(
 def search_transcripts(
     q: str,
     include_archived: bool = False,
+    project: str | None = None,
+    tag: str | None = None,
+    status: JobStatus | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    format: str | None = None,
     db: Session = Depends(get_db),
 ) -> list[SearchResult]:
     query = q.strip()
@@ -134,7 +140,16 @@ def search_transcripts(
     return [
         result
         for job in jobs
-        if include_archived or not job.is_archived
+        if _job_matches_search_filters(
+            job,
+            include_archived,
+            project,
+            tag,
+            status,
+            created_from,
+            created_to,
+            format,
+        )
         if (result := _build_search_result(job, query)) is not None
     ]
 
@@ -555,3 +570,43 @@ def _job_matches_filters(
     if favorite is not None and job.is_favorite != favorite:
         return False
     return True
+
+
+def _job_matches_search_filters(
+    job: TranscriptJob,
+    include_archived: bool,
+    project: str | None,
+    tag: str | None,
+    status: JobStatus | None,
+    created_from: datetime | None,
+    created_to: datetime | None,
+    format: str | None,
+) -> bool:
+    if not _job_matches_filters(job, include_archived, project, tag, None):
+        return False
+    if status is not None and job.status != status:
+        return False
+    created_at = _as_utc(job.created_at)
+    if created_from is not None and created_at < _as_utc(created_from):
+        return False
+    if created_to is not None and created_at > _as_utc(created_to):
+        return False
+    if format is not None and not _job_matches_format(job, format):
+        return False
+    return True
+
+
+def _job_matches_format(job: TranscriptJob, requested_format: str) -> bool:
+    normalized = requested_format.strip().casefold().lstrip(".")
+    if not normalized:
+        return True
+
+    extension = Path(job.filename).suffix.casefold().lstrip(".")
+    media_type = job.media_type.casefold()
+    return normalized == extension or normalized in media_type
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
