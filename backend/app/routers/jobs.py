@@ -49,6 +49,10 @@ class JobCanceled(RuntimeError):
     pass
 
 
+class JobPaused(RuntimeError):
+    pass
+
+
 @router.post("/upload", response_model=UploadResponse)
 @router.post("/uploads", response_model=UploadResponse)
 async def upload_file(
@@ -185,6 +189,23 @@ def list_jobs(
     ]
 
 
+def recover_interrupted_jobs(db: Session) -> list[int]:
+    jobs = db.scalars(
+        select(TranscriptJob).where(TranscriptJob.status.in_([JobStatus.pending, JobStatus.running]))
+    ).all()
+    job_ids = []
+    for job in jobs:
+        if job.status == JobStatus.running:
+            job.status = JobStatus.pending
+            job.current_stage = "Queued after restart"
+            job.processing_time_seconds = None
+            job.estimated_remaining_seconds = None
+            job.processing_speed = None
+        job_ids.append(job.id)
+    db.commit()
+    return job_ids
+
+
 @router.get("/search", response_model=list[SearchResult])
 def search_transcripts(
     q: str,
@@ -278,6 +299,41 @@ def retry_job(
         raise HTTPException(status_code=409, detail="Transcript job is already queued or running.")
 
     _reset_job_for_retry(job)
+    sync_job_search_index(db, job)
+    db.commit()
+    db.refresh(job)
+    background_tasks.add_task(process_job, job.id)
+    return _job_to_schema(job)
+
+
+@router.post("/jobs/{job_id}/pause", response_model=JobRead)
+def pause_job(job_id: int, db: Session = Depends(get_db)) -> JobRead:
+    job = db.get(TranscriptJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Transcript job not found.")
+    if job.status not in {JobStatus.pending, JobStatus.running}:
+        raise HTTPException(status_code=409, detail="Only queued or running jobs can be paused.")
+
+    _mark_job_paused(job)
+    sync_job_search_index(db, job)
+    db.commit()
+    db.refresh(job)
+    return _job_to_schema(job)
+
+
+@router.post("/jobs/{job_id}/resume", response_model=JobRead)
+def resume_job(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> JobRead:
+    job = db.get(TranscriptJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Transcript job not found.")
+    if job.status != JobStatus.paused:
+        raise HTTPException(status_code=409, detail="Only paused jobs can be resumed.")
+
+    _prepare_job_for_resume(job)
     sync_job_search_index(db, job)
     db.commit()
     db.refresh(job)
@@ -439,15 +495,15 @@ async def process_job(job_id: int) -> None:
         if not job:
             return
         started_at = perf_counter()
-        _raise_if_canceled(db, job)
-        _set_progress(db, job, JobStatus.running, "Starting", 5, started_at)
 
         try:
+            _raise_if_canceled_or_paused(db, job)
+            _set_progress(db, job, JobStatus.running, "Starting", 5, started_at)
             source_path = Path(job.file_path)
-            _raise_if_canceled(db, job)
+            _raise_if_canceled_or_paused(db, job)
             _set_progress(db, job, JobStatus.running, "Validating media", 15, started_at)
             ensure_readable_media(source_path)
-            _raise_if_canceled(db, job)
+            _raise_if_canceled_or_paused(db, job)
             _set_progress(db, job, JobStatus.running, "Extracting metadata", 25, started_at)
             metadata = extract_metadata(source_path)
             job.duration_seconds = metadata["duration_seconds"]
@@ -455,14 +511,14 @@ async def process_job(job_id: int) -> None:
             job.channels = metadata["channels"]
             db.commit()
 
-            _raise_if_canceled(db, job)
+            _raise_if_canceled_or_paused(db, job)
             _set_progress(db, job, JobStatus.running, "Normalizing audio", 45, started_at)
             normalized_path = settings.storage_dir / "audio" / f"{source_path.stem}.wav"
             normalize_audio(source_path, normalized_path, settings.normalized_sample_rate)
-            _raise_if_canceled(db, job)
+            _raise_if_canceled_or_paused(db, job)
             _set_progress(db, job, JobStatus.running, "Transcribing", 75, started_at)
             transcript_text, segments = await transcribe_media(normalized_path, settings)
-            _raise_if_canceled(db, job)
+            _raise_if_canceled_or_paused(db, job)
             job.transcript_text = transcript_text
             job.segments_json = json.dumps([segment.model_dump() for segment in segments])
             job.status = JobStatus.completed
@@ -476,6 +532,11 @@ async def process_job(job_id: int) -> None:
             sync_job_search_index(db, job)
         except JobCanceled:
             _mark_job_canceled(job)
+            _update_timing_metrics(job, started_at)
+            job.estimated_remaining_seconds = None
+            sync_job_search_index(db, job)
+        except JobPaused:
+            _mark_job_paused(job)
             _update_timing_metrics(job, started_at)
             job.estimated_remaining_seconds = None
             sync_job_search_index(db, job)
@@ -657,10 +718,30 @@ def _mark_job_canceled(job: TranscriptJob) -> None:
     job.error_message = ""
 
 
-def _raise_if_canceled(db: Session, job: TranscriptJob) -> None:
+def _mark_job_paused(job: TranscriptJob) -> None:
+    job.status = JobStatus.paused
+    job.current_stage = "Paused"
+    job.progress_percent = min(job.progress_percent, 99)
+    job.estimated_remaining_seconds = None
+    job.error_message = ""
+
+
+def _prepare_job_for_resume(job: TranscriptJob) -> None:
+    job.status = JobStatus.pending
+    job.current_stage = "Queued"
+    job.progress_percent = 0
+    job.processing_time_seconds = None
+    job.estimated_remaining_seconds = None
+    job.processing_speed = None
+    job.error_message = ""
+
+
+def _raise_if_canceled_or_paused(db: Session, job: TranscriptJob) -> None:
     db.refresh(job)
     if job.status == JobStatus.canceled:
         raise JobCanceled()
+    if job.status == JobStatus.paused:
+        raise JobPaused()
 
 
 def _safe_export_basename(filename: str) -> str:

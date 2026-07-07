@@ -10,6 +10,7 @@ from app.database import Base
 class JobStatus(StrEnum):
     pending = "pending"
     running = "running"
+    paused = "paused"
     completed = "completed"
     failed = "failed"
     canceled = "canceled"

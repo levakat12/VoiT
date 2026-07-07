@@ -16,9 +16,12 @@ VoiT is an AI video and audio transcription platform. This repository starts the
 - Organize jobs with project, folder, tags, favorite, and archive metadata.
 - Send optional signed webhooks when background transcription jobs finish.
 - Show browser desktop notifications when active jobs finish.
+- Pause, resume, or cancel active jobs from the upload window.
+- Recover queued or interrupted jobs when the API starts.
 - Generate local transcript insights: cleanup text, summary, chapters, keywords, and speaker analytics.
 - Use a development transcript fallback when no Parakeet API key is configured.
-- View, search, edit, save, and export transcripts.
+- Reopen recent transcripts and search stored transcripts from the upload window.
+- View, search, edit, save, and download transcript exports from the text window.
 - Generate TXT, DOCX, PDF, JSON, SRT, and VTT exports.
 - Tune SRT/VTT exports with maximum cue characters, duration, and line count.
 
@@ -98,6 +101,8 @@ VOIT_WEBHOOK_TIMEOUT_SECONDS=10
 - `GET /api/jobs/{job_id}/insights`
 - `GET /api/jobs/{job_id}/insights/exports/{format}` where `format` is `json`, `txt`, or `md`
 - `POST /api/jobs/{job_id}/retry`
+- `POST /api/jobs/{job_id}/pause`
+- `POST /api/jobs/{job_id}/resume`
 - `POST /api/jobs/{job_id}/cancel`
 - `PATCH /api/jobs/{job_id}/organization`
 - `PATCH /api/jobs/organization/bulk`

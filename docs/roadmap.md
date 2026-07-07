@@ -14,11 +14,13 @@ Implemented in this starter version:
 - Simple transcript viewer workflow.
 - Editable transcript persistence.
 - TXT, DOCX, PDF, JSON, SRT, and VTT exports.
+- Text-window export format selector and download control.
 - SRT/VTT subtitle cue length, duration, and line-count controls.
-- History list.
+- History list with a compact recent-transcripts picker and search field in the upload window.
 - Spec-compatible REST aliases for upload, history, transcript lookup, transcript delete, and export.
 - Retry endpoint for failed or completed transcription jobs.
 - Cancel endpoint with cooperative cancellation checks during processing.
+- Startup recovery for queued or interrupted background jobs.
 - ETA and processing speed metrics for running jobs.
 - Optional signed webhooks for finished background jobs.
 - Safe settings endpoint for configured formats, limits, language, storage, and API-key presence.
@@ -29,18 +31,16 @@ Next items:
 
 - Confirm the production hosted Parakeet endpoint URL for the provided API key.
 - User accounts and encrypted API key storage.
-- Durable background queue with retry policies.
+- External worker queue for multi-process production deployments.
 
 ## Phase 2: Professional Features
 
 Implemented:
 
 - Backend batch upload endpoint through `POST /api/uploads/batch`.
+- Pause and resume endpoints for queued or running jobs.
+- Dedicated pause, resume, and cancel controls in the frontend upload window.
 - Browser desktop notifications when active jobs complete, fail, or are canceled.
-
-Next items:
-
-- Pause, resume, cancel, and retry.
 
 ## Phase 3: AI Enhancement
 

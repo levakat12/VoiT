@@ -1,4 +1,4 @@
-import type { JobListItem, JobRead, TranscriptSegment } from "./types";
+import type { JobListItem, JobRead, SearchResult, TranscriptSegment } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8100/api";
 
@@ -29,6 +29,28 @@ export function getJob(id: number): Promise<JobRead> {
   return request<JobRead>(`/jobs/${id}`);
 }
 
+export function searchTranscripts(query: string): Promise<SearchResult[]> {
+  return request<SearchResult[]>(`/search?q=${encodeURIComponent(query)}`);
+}
+
+export function pauseJob(id: number): Promise<JobRead> {
+  return request<JobRead>(`/jobs/${id}/pause`, {
+    method: "POST"
+  });
+}
+
+export function resumeJob(id: number): Promise<JobRead> {
+  return request<JobRead>(`/jobs/${id}/resume`, {
+    method: "POST"
+  });
+}
+
+export function cancelJob(id: number): Promise<JobRead> {
+  return request<JobRead>(`/jobs/${id}/cancel`, {
+    method: "POST"
+  });
+}
+
 export function saveTranscript(
   id: number,
   transcriptText: string,
@@ -49,4 +71,3 @@ export function saveTranscript(
 export function exportUrl(id: number, format: string): string {
   return `${API_BASE_URL}/jobs/${id}/exports/${format}`;
 }
-

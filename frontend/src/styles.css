@@ -87,6 +87,132 @@ p,
   overflow-wrap: anywhere;
 }
 
+.jobControls {
+  display: flex;
+  gap: 8px;
+}
+
+.iconButton {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+}
+
+.iconButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.recentBlock {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid #e5e5e5;
+  padding-top: 14px;
+}
+
+.recentHeader {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.smallIconButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+}
+
+.smallIconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.searchForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 8px;
+}
+
+.searchInput {
+  width: 100%;
+  height: 32px;
+  min-width: 0;
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: #111;
+}
+
+.recentList {
+  min-height: 44px;
+  max-height: 280px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recentJob {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+  text-align: left;
+}
+
+.recentJob.active {
+  border-color: #111;
+}
+
+.recentJob span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentJob small,
+.emptyRecent {
+  color: #666;
+  font-size: 12px;
+}
+
+.emptyRecent {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
 .textWindow {
   min-width: 0;
   min-height: calc(100vh - 32px);
@@ -104,12 +230,45 @@ p,
   border-bottom: 1px solid #d7d7d7;
 }
 
+.textActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.exportSelect {
+  height: 44px;
+  min-width: 86px;
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+}
+
+.exportButton {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+}
+
 .saveButton {
   min-width: 92px;
   padding: 0 14px;
 }
 
-.saveButton:disabled {
+.saveButton:disabled,
+.exportButton:disabled,
+.exportSelect:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -149,5 +308,20 @@ textarea {
 
   .textWindow {
     min-height: 70vh;
+  }
+
+  .textHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .textActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .exportSelect,
+  .saveButton {
+    flex: 1;
   }
 }

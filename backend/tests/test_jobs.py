@@ -13,15 +13,39 @@ from app.routers.jobs import (
     _job_matches_filters,
     _job_matches_search_filters,
     _mark_job_canceled,
+    _mark_job_paused,
     _normalize_tags,
+    _prepare_job_for_resume,
     _processing_speed,
     _reset_job_for_retry,
     _safe_export_basename,
     _tags_from_job,
     _unique_job_ids,
+    recover_interrupted_jobs,
     upload_files_batch,
 )
 from app.schemas import OrganizationUpdate
+
+
+class FakeScalarResult:
+    def __init__(self, jobs: list[TranscriptJob]) -> None:
+        self.jobs = jobs
+
+    def all(self) -> list[TranscriptJob]:
+        return self.jobs
+
+
+class FakeRecoveryDb:
+    def __init__(self, jobs: list[TranscriptJob]) -> None:
+        self.jobs = jobs
+        self.committed = False
+
+    def scalars(self, _statement: object) -> FakeScalarResult:
+        recoverable_statuses = {JobStatus.pending, JobStatus.running}
+        return FakeScalarResult([job for job in self.jobs if job.status in recoverable_statuses])
+
+    def commit(self) -> None:
+        self.committed = True
 
 
 def test_reset_job_for_retry_clears_previous_failure() -> None:
@@ -72,6 +96,48 @@ def test_reset_job_for_retry_handles_canceled_job() -> None:
     assert job.progress_percent == 0
 
 
+def test_recover_interrupted_jobs_requeues_running_jobs() -> None:
+    pending = TranscriptJob(
+        id=1,
+        filename="queued.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/queued.wav",
+        file_size=10,
+        status=JobStatus.pending,
+    )
+    running = TranscriptJob(
+        id=2,
+        filename="running.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/running.wav",
+        file_size=10,
+        status=JobStatus.running,
+        current_stage="Transcribing",
+        processing_time_seconds=4,
+        estimated_remaining_seconds=10,
+        processing_speed=2,
+    )
+    paused = TranscriptJob(
+        id=3,
+        filename="paused.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/paused.wav",
+        file_size=10,
+        status=JobStatus.paused,
+    )
+    db = FakeRecoveryDb([pending, running, paused])
+
+    assert recover_interrupted_jobs(db) == [1, 2]
+    assert pending.status == JobStatus.pending
+    assert running.status == JobStatus.pending
+    assert running.current_stage == "Queued after restart"
+    assert running.processing_time_seconds is None
+    assert running.estimated_remaining_seconds is None
+    assert running.processing_speed is None
+    assert paused.status == JobStatus.paused
+    assert db.committed is True
+
+
 def test_mark_job_canceled_updates_status_without_failure() -> None:
     job = TranscriptJob(
         filename="audio.wav",
@@ -90,6 +156,52 @@ def test_mark_job_canceled_updates_status_without_failure() -> None:
     assert job.current_stage == "Canceled"
     assert job.progress_percent == 75
     assert job.error_message == ""
+
+
+def test_mark_job_paused_updates_status_without_failure() -> None:
+    job = TranscriptJob(
+        filename="audio.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/audio.wav",
+        file_size=10,
+        status=JobStatus.running,
+        current_stage="Transcribing",
+        progress_percent=75,
+        estimated_remaining_seconds=12,
+        error_message="",
+    )
+
+    _mark_job_paused(job)
+
+    assert job.status == JobStatus.paused
+    assert job.current_stage == "Paused"
+    assert job.progress_percent == 75
+    assert job.estimated_remaining_seconds is None
+    assert job.error_message == ""
+
+
+def test_prepare_job_for_resume_requeues_paused_job() -> None:
+    job = TranscriptJob(
+        filename="audio.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/audio.wav",
+        file_size=10,
+        status=JobStatus.paused,
+        current_stage="Paused",
+        progress_percent=75,
+        processing_time_seconds=10,
+        estimated_remaining_seconds=None,
+        processing_speed=2,
+        error_message="",
+    )
+
+    _prepare_job_for_resume(job)
+
+    assert job.status == JobStatus.pending
+    assert job.current_stage == "Queued"
+    assert job.progress_percent == 0
+    assert job.processing_time_seconds is None
+    assert job.processing_speed is None
 
 
 def test_processing_speed_uses_media_duration_and_progress() -> None:

@@ -1,9 +1,11 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import init_db
-from app.routers.jobs import router as jobs_router
+from app.database import SessionLocal, init_db
+from app.routers.jobs import process_job, recover_interrupted_jobs, router as jobs_router
 from app.routers.settings import router as settings_router
 
 settings = get_settings()
@@ -20,8 +22,12 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     init_db()
+    with SessionLocal() as db:
+        job_ids = recover_interrupted_jobs(db)
+    for job_id in job_ids:
+        asyncio.create_task(process_job(job_id))
 
 
 @app.get("/api/health")

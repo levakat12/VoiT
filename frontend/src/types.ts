@@ -1,4 +1,4 @@
-export type JobStatus = "pending" | "running" | "completed" | "failed" | "canceled";
+export type JobStatus = "pending" | "running" | "paused" | "completed" | "failed" | "canceled";
 
 export interface TranscriptSegment {
   start: number;
@@ -25,6 +25,15 @@ export interface JobListItem {
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface SearchResult {
+  job_id: number;
+  filename: string;
+  status: JobStatus;
+  match_count: number;
+  snippets: string[];
+  created_at: string;
 }
 
 export interface JobRead extends JobListItem {
