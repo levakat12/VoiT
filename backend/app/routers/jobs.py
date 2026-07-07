@@ -34,6 +34,7 @@ from app.services.media import (
 )
 from app.services.parakeet import transcribe_media
 from app.services.subtitles import SubtitleOptions
+from app.services.webhooks import deliver_job_webhook
 
 router = APIRouter()
 
@@ -390,6 +391,7 @@ async def process_job(job_id: int) -> None:
             job.estimated_remaining_seconds = None
             job.error_message = str(exc)
         db.commit()
+        await deliver_job_webhook(job, settings)
 
 
 def _segments_from_job(job: TranscriptJob) -> list[TranscriptSegment]:

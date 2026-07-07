@@ -20,6 +20,7 @@ Implemented in this starter version:
 - Retry endpoint for failed or completed transcription jobs.
 - Cancel endpoint with cooperative cancellation checks during processing.
 - ETA and processing speed metrics for running jobs.
+- Optional signed webhooks for finished background jobs.
 - Safe settings endpoint for configured formats, limits, language, storage, and API-key presence.
 - Cross-transcript search endpoint with result snippets.
 - Settings through environment variables.
@@ -34,7 +35,7 @@ Next items:
 
 - Batch uploads.
 - Pause, resume, cancel, and retry.
-- Desktop notifications and webhooks.
+- Desktop notifications.
 
 ## Phase 3: AI Enhancement
 

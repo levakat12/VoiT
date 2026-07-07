@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     parakeet_retries: int = Field(default=2, alias="PARAKEET_RETRIES")
     parakeet_timeout_seconds: int = Field(default=180, alias="PARAKEET_TIMEOUT_SECONDS")
     normalized_sample_rate: int = 16000
+    webhook_url: str = Field(default="", alias="VOIT_WEBHOOK_URL")
+    webhook_secret: str = Field(default="", alias="VOIT_WEBHOOK_SECRET")
+    webhook_retries: int = Field(default=2, alias="VOIT_WEBHOOK_RETRIES")
+    webhook_timeout_seconds: int = Field(default=10, alias="VOIT_WEBHOOK_TIMEOUT_SECONDS")
 
     @property
     def allowed_origin_list(self) -> list[str]:

@@ -109,6 +109,7 @@ class SettingsRead(BaseModel):
     model: str | None
     max_upload_mb: int
     allowed_origins: list[str]
+    webhook_configured: bool
     supported_formats: list[str]
     export_formats: list[str]
     storage_dir: str

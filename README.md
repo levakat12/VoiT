@@ -14,6 +14,7 @@ VoiT is an AI video and audio transcription platform. This repository starts the
 - Expose safe settings metadata without returning secrets.
 - Search across stored transcripts with matching snippets and metadata filters.
 - Organize jobs with project, folder, tags, favorite, and archive metadata.
+- Send optional signed webhooks when background transcription jobs finish.
 - Use a development transcript fallback when no Parakeet API key is configured.
 - View, search, edit, save, and export transcripts.
 - Generate TXT, DOCX, PDF, JSON, SRT, and VTT exports.
@@ -69,6 +70,17 @@ PARAKEET_LANGUAGE=en-US
 ```
 
 The default API shape follows NVIDIA Speech NIM's HTTP ASR endpoint, `POST /v1/audio/transcriptions`, which accepts `multipart/form-data` with a WAV, OPUS, or FLAC file plus language/model selection. Without a key, VoiT returns a deterministic development transcript so the rest of the app remains usable during local development.
+
+## Webhooks
+
+Set `VOIT_WEBHOOK_URL` to receive a `transcript.job.finished` event after a background job reaches a final state. Set `VOIT_WEBHOOK_SECRET` to add an `X-VoiT-Signature` HMAC header. Webhook payloads include job metadata but not transcript text.
+
+```bash
+VOIT_WEBHOOK_URL=https://example.com/voit-webhook
+VOIT_WEBHOOK_SECRET=your-signing-secret
+VOIT_WEBHOOK_RETRIES=2
+VOIT_WEBHOOK_TIMEOUT_SECONDS=10
+```
 
 ## API Summary
 

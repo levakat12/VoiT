@@ -16,6 +16,7 @@ def read_settings(settings: Settings = Depends(get_settings)) -> SettingsRead:
         model=settings.parakeet_model or None,
         max_upload_mb=settings.max_upload_mb,
         allowed_origins=settings.allowed_origin_list,
+        webhook_configured=bool(settings.webhook_url),
         supported_formats=sorted(SUPPORTED_EXTENSIONS),
         export_formats=["txt", "docx", "pdf", "json", "srt", "vtt"],
         storage_dir=str(settings.storage_dir),
