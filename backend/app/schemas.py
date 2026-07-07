@@ -31,6 +31,8 @@ class JobRead(BaseModel):
     current_stage: str
     progress_percent: int
     processing_time_seconds: float | None
+    estimated_remaining_seconds: float | None
+    processing_speed: float | None
     transcript_text: str
     segments: list[TranscriptSegment]
     export_history: list[ExportHistoryItem]
@@ -52,6 +54,8 @@ class JobListItem(BaseModel):
     current_stage: str
     progress_percent: int
     processing_time_seconds: float | None
+    estimated_remaining_seconds: float | None
+    processing_speed: float | None
     project: str
     folder: str
     tags: list[str]

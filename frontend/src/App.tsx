@@ -110,6 +110,27 @@ function statusMessage(job: JobRead): string {
   if (job.status === "completed") return "Complete";
   if (job.status === "canceled") return "Canceled";
   if (job.status === "failed") return job.error_message || "Failed";
-  if (job.status === "running") return `${job.current_stage} (${job.progress_percent}%)`;
+  if (job.status === "running") {
+    return `${job.current_stage} (${job.progress_percent}%)${metricMessage(job)}`;
+  }
   return "Waiting...";
+}
+
+function metricMessage(job: JobRead): string {
+  const parts = [];
+  if (job.estimated_remaining_seconds != null) {
+    parts.push(`${formatDuration(job.estimated_remaining_seconds)} left`);
+  }
+  if (job.processing_speed != null) {
+    parts.push(`${job.processing_speed.toFixed(1)}x`);
+  }
+  return parts.length ? ` - ${parts.join(" / ")}` : "";
+}
+
+function formatDuration(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  if (minutes === 0) return `${remainder}s`;
+  return `${minutes}m ${remainder.toString().padStart(2, "0")}s`;
 }

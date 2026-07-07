@@ -107,6 +107,8 @@ def list_jobs(
             current_stage=job.current_stage,
             progress_percent=job.progress_percent,
             processing_time_seconds=job.processing_time_seconds,
+            estimated_remaining_seconds=job.estimated_remaining_seconds,
+            processing_speed=job.processing_speed,
             project=job.project,
             folder=job.folder,
             tags=_tags_from_job(job),
@@ -344,15 +346,15 @@ async def process_job(job_id: int) -> None:
             return
         started_at = perf_counter()
         _raise_if_canceled(db, job)
-        _set_progress(db, job, JobStatus.running, "Starting", 5)
+        _set_progress(db, job, JobStatus.running, "Starting", 5, started_at)
 
         try:
             source_path = Path(job.file_path)
             _raise_if_canceled(db, job)
-            _set_progress(db, job, JobStatus.running, "Validating media", 15)
+            _set_progress(db, job, JobStatus.running, "Validating media", 15, started_at)
             ensure_readable_media(source_path)
             _raise_if_canceled(db, job)
-            _set_progress(db, job, JobStatus.running, "Extracting metadata", 25)
+            _set_progress(db, job, JobStatus.running, "Extracting metadata", 25, started_at)
             metadata = extract_metadata(source_path)
             job.duration_seconds = metadata["duration_seconds"]
             job.sample_rate = metadata["sample_rate"]
@@ -360,11 +362,11 @@ async def process_job(job_id: int) -> None:
             db.commit()
 
             _raise_if_canceled(db, job)
-            _set_progress(db, job, JobStatus.running, "Normalizing audio", 45)
+            _set_progress(db, job, JobStatus.running, "Normalizing audio", 45, started_at)
             normalized_path = settings.storage_dir / "audio" / f"{source_path.stem}.wav"
             normalize_audio(source_path, normalized_path, settings.normalized_sample_rate)
             _raise_if_canceled(db, job)
-            _set_progress(db, job, JobStatus.running, "Transcribing", 75)
+            _set_progress(db, job, JobStatus.running, "Transcribing", 75, started_at)
             transcript_text, segments = await transcribe_media(normalized_path, settings)
             _raise_if_canceled(db, job)
             job.transcript_text = transcript_text
@@ -372,15 +374,20 @@ async def process_job(job_id: int) -> None:
             job.status = JobStatus.completed
             job.current_stage = "Complete"
             job.progress_percent = 100
-            job.processing_time_seconds = round(perf_counter() - started_at, 3)
+            elapsed = perf_counter() - started_at
+            job.processing_time_seconds = round(elapsed, 3)
+            job.estimated_remaining_seconds = 0
+            job.processing_speed = _processing_speed(job, elapsed, 100)
             job.error_message = ""
         except JobCanceled:
             _mark_job_canceled(job)
-            job.processing_time_seconds = round(perf_counter() - started_at, 3)
+            _update_timing_metrics(job, started_at)
+            job.estimated_remaining_seconds = None
         except Exception as exc:  # noqa: BLE001
             job.status = JobStatus.failed
             job.current_stage = "Failed"
-            job.processing_time_seconds = round(perf_counter() - started_at, 3)
+            _update_timing_metrics(job, started_at)
+            job.estimated_remaining_seconds = None
             job.error_message = str(exc)
         db.commit()
 
@@ -414,6 +421,8 @@ def _job_to_schema(job: TranscriptJob) -> JobRead:
         current_stage=job.current_stage,
         progress_percent=job.progress_percent,
         processing_time_seconds=job.processing_time_seconds,
+        estimated_remaining_seconds=job.estimated_remaining_seconds,
+        processing_speed=job.processing_speed,
         transcript_text=job.transcript_text,
         segments=_segments_from_job(job),
         export_history=_export_history_from_job(job),
@@ -486,11 +495,38 @@ def _set_progress(
     status: JobStatus,
     stage: str,
     progress_percent: int,
+    started_at: float | None = None,
 ) -> None:
     job.status = status
     job.current_stage = stage
     job.progress_percent = progress_percent
+    if started_at is not None:
+        _update_timing_metrics(job, started_at)
     db.commit()
+
+
+def _update_timing_metrics(job: TranscriptJob, started_at: float) -> None:
+    elapsed = max(perf_counter() - started_at, 0.001)
+    job.processing_time_seconds = round(elapsed, 3)
+    job.processing_speed = _processing_speed(job, elapsed, job.progress_percent)
+    if job.status == JobStatus.running and 0 < job.progress_percent < 100:
+        remaining = elapsed * ((100 - job.progress_percent) / job.progress_percent)
+        job.estimated_remaining_seconds = round(remaining, 3)
+    elif job.status == JobStatus.completed:
+        job.estimated_remaining_seconds = 0
+    else:
+        job.estimated_remaining_seconds = None
+
+
+def _processing_speed(
+    job: TranscriptJob,
+    elapsed_seconds: float,
+    progress_percent: int,
+) -> float | None:
+    if not job.duration_seconds or elapsed_seconds <= 0:
+        return None
+    completed_fraction = max(min(progress_percent / 100, 1), 0.01)
+    return round((job.duration_seconds * completed_fraction) / elapsed_seconds, 3)
 
 
 def _record_export(job: TranscriptJob, export_format: str) -> None:
@@ -509,6 +545,8 @@ def _reset_job_for_retry(job: TranscriptJob) -> None:
     job.current_stage = "Queued"
     job.progress_percent = 0
     job.processing_time_seconds = None
+    job.estimated_remaining_seconds = None
+    job.processing_speed = None
     job.transcript_text = ""
     job.segments_json = "[]"
     job.error_message = ""

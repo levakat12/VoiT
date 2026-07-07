@@ -10,7 +10,7 @@ VoiT is an AI video and audio transcription platform. This repository starts the
 - Validate readable audio streams with `ffprobe`.
 - Extract and normalize audio to mono 16 kHz WAV with `ffmpeg`.
 - Send normalized audio through a Parakeet/NVIDIA ASR-compatible service boundary.
-- Track current processing stage, progress percentage, processing time, and export history.
+- Track current processing stage, progress percentage, processing time, ETA, speed, and export history.
 - Expose safe settings metadata without returning secrets.
 - Search across stored transcripts with matching snippets and metadata filters.
 - Organize jobs with project, folder, tags, favorite, and archive metadata.

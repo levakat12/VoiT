@@ -16,6 +16,8 @@ export interface JobListItem {
   current_stage: string;
   progress_percent: number;
   processing_time_seconds?: number | null;
+  estimated_remaining_seconds?: number | null;
+  processing_speed?: number | null;
   project: string;
   folder: string;
   tags: string[];

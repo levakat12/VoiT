@@ -19,6 +19,7 @@ Implemented in this starter version:
 - Spec-compatible REST aliases for upload, history, transcript lookup, transcript delete, and export.
 - Retry endpoint for failed or completed transcription jobs.
 - Cancel endpoint with cooperative cancellation checks during processing.
+- ETA and processing speed metrics for running jobs.
 - Safe settings endpoint for configured formats, limits, language, storage, and API-key presence.
 - Cross-transcript search endpoint with result snippets.
 - Settings through environment variables.
@@ -33,7 +34,6 @@ Next items:
 
 - Batch uploads.
 - Pause, resume, cancel, and retry.
-- ETA and speed metrics.
 - Desktop notifications and webhooks.
 
 ## Phase 3: AI Enhancement

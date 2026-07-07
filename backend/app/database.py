@@ -47,6 +47,8 @@ def _ensure_sqlite_columns() -> None:
         "current_stage": "VARCHAR(100) NOT NULL DEFAULT 'Queued'",
         "progress_percent": "INTEGER NOT NULL DEFAULT 0",
         "processing_time_seconds": "FLOAT",
+        "estimated_remaining_seconds": "FLOAT",
+        "processing_speed": "FLOAT",
         "export_history_json": "TEXT NOT NULL DEFAULT '[]'",
         "project": "VARCHAR(120) NOT NULL DEFAULT ''",
         "folder": "VARCHAR(240) NOT NULL DEFAULT ''",

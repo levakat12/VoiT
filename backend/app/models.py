@@ -34,6 +34,8 @@ class TranscriptJob(Base):
     current_stage: Mapped[str] = mapped_column(String(100), default="Queued", nullable=False)
     progress_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processing_time_seconds: Mapped[float | None] = mapped_column(nullable=True)
+    estimated_remaining_seconds: Mapped[float | None] = mapped_column(nullable=True)
+    processing_speed: Mapped[float | None] = mapped_column(nullable=True)
     transcript_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     segments_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     export_history_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)

@@ -8,6 +8,7 @@ from app.routers.jobs import (
     _job_matches_search_filters,
     _mark_job_canceled,
     _normalize_tags,
+    _processing_speed,
     _reset_job_for_retry,
     _safe_export_basename,
     _tags_from_job,
@@ -24,6 +25,8 @@ def test_reset_job_for_retry_clears_previous_failure() -> None:
         current_stage="Failed",
         progress_percent=55,
         processing_time_seconds=4.2,
+        estimated_remaining_seconds=12.5,
+        processing_speed=3.1,
         transcript_text="Old transcript",
         segments_json='[{"text": "Old"}]',
         error_message="Network failed",
@@ -35,6 +38,8 @@ def test_reset_job_for_retry_clears_previous_failure() -> None:
     assert job.current_stage == "Queued"
     assert job.progress_percent == 0
     assert job.processing_time_seconds is None
+    assert job.estimated_remaining_seconds is None
+    assert job.processing_speed is None
     assert job.transcript_text == ""
     assert job.segments_json == "[]"
     assert job.error_message == ""
@@ -76,6 +81,30 @@ def test_mark_job_canceled_updates_status_without_failure() -> None:
     assert job.current_stage == "Canceled"
     assert job.progress_percent == 75
     assert job.error_message == ""
+
+
+def test_processing_speed_uses_media_duration_and_progress() -> None:
+    job = TranscriptJob(
+        filename="audio.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/audio.wav",
+        file_size=10,
+        duration_seconds=120,
+    )
+
+    assert _processing_speed(job, elapsed_seconds=30, progress_percent=50) == 2
+    assert _processing_speed(job, elapsed_seconds=30, progress_percent=100) == 4
+
+
+def test_processing_speed_waits_for_duration() -> None:
+    job = TranscriptJob(
+        filename="audio.wav",
+        media_type="audio/wav",
+        file_path="storage/uploads/audio.wav",
+        file_size=10,
+    )
+
+    assert _processing_speed(job, elapsed_seconds=30, progress_percent=50) is None
 
 
 def test_safe_export_basename_removes_header_unfriendly_characters() -> None:
