@@ -1,0 +1,11 @@
+{
+  "name": "voit",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "frontend:dev": "pnpm --dir frontend dev",
+    "frontend:build": "pnpm --dir frontend build"
+  },
+  "devDependencies": {}
+}
+
