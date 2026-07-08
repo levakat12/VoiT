@@ -1,93 +1,163 @@
 # VoiT
 
-VoiT is an AI video and audio transcription platform. This repository starts the product described in `AI_Video_Transcription_Platform_Project_Outline.md` with a FastAPI backend and a React/TypeScript frontend.
+VoiT is a simple transcription app for audio and video files. You upload a file on the left, and the transcript appears in the text window on the right. The interface is intentionally small: one upload area, one transcript area, and enough controls to search, save, copy, and export the text without turning the app into a dashboard.
 
-## Current MVP
+Behind that simple screen, VoiT does the heavier work for you:
 
-- Upload one or more audio/video files with extension and size validation.
-- Store processing history in SQLite.
-- Extract media metadata with `ffprobe` when FFmpeg is installed.
-- Validate readable audio streams with `ffprobe`.
-- Extract and normalize audio to mono 16 kHz WAV with `ffmpeg`.
-- Send normalized audio through a Parakeet/NVIDIA ASR-compatible service boundary.
-- Track current processing stage, progress bar, processing time, ETA, speed, and export history.
-- Expose safe settings metadata without returning secrets.
-- Search across stored transcripts with matching snippets, metadata filters, and a SQLite full-text index.
-- Organize jobs with project, folder, tags, favorite, and archive metadata.
-- Send optional signed webhooks when background transcription jobs finish.
-- Show browser desktop notifications when active jobs finish.
-- Pause, resume, retry, or cancel jobs from the upload window.
-- Recover queued or interrupted jobs when the API starts.
-- Generate local transcript insights: cleanup text, summary, chapters, keywords, and speaker analytics.
-- Use a development transcript fallback when no Parakeet API key is configured.
-- Reopen recent transcripts and search stored transcripts with snippets from the upload window.
-- View, search, copy, edit, save, and download transcript exports from the text window.
-- Generate TXT, DOCX, PDF, JSON, SRT, and VTT exports.
-- Tune SRT/VTT exports with maximum cue characters, duration, and line count.
+- accepts common audio and video files
+- checks that the file has a readable audio stream
+- converts the audio to clean mono 16 kHz WAV for transcription
+- sends the normalized audio to a Parakeet/NVIDIA-compatible ASR service
+- stores jobs and transcript history in SQLite
+- lets you reopen, search, edit, save, and export transcripts
+- creates TXT, DOCX, PDF, JSON, SRT, and VTT exports
+- can pause, resume, retry, or cancel jobs
+- can generate basic transcript insights such as cleanup text, summary, chapters, keywords, and speaker analytics
 
-The visible app is intentionally simple: an upload window and a text window. Additional export routes are available through the API.
+If no Parakeet API key is configured, the backend returns a predictable development transcript. That means you can still run the app locally, test uploads, and work on the UI before connecting a real transcription service.
 
-## Repository Layout
+## Project Structure
 
 ```text
-backend/     FastAPI app, persistence, transcription, subtitle, and export services
-frontend/    React + TypeScript app
-docs/        Product notes and implementation roadmap
-docker/      Container files
+backend/      FastAPI app, database models, media processing, transcription, exports
+frontend/     React + TypeScript Vite app
+docs/         Roadmap and product notes
+docker/       Container files
 ```
 
-## Quick Start
+## Supported Uploads
 
-### Backend
+VoiT accepts:
 
-```bash
-cd backend
+```text
+.mp4, .mov, .mkv, .avi, .webm, .mp3, .wav, .flac, .m4a, .aac
+```
+
+FFmpeg is required for non-WAV files because the backend uses `ffprobe` to inspect media and `ffmpeg` to extract/normalize audio. Simple PCM WAV files can work without FFmpeg, but installing FFmpeg is strongly recommended.
+
+On Windows, one easy option is:
+
+```powershell
+winget install --id Gyan.FFmpeg --exact --scope user
+```
+
+If FFmpeg is installed but not on PATH yet, VoiT also tries to find WinGet and Chocolatey installations automatically.
+
+## Requirements
+
+- Python 3.12
+- Node.js
+- pnpm
+- FFmpeg and FFprobe
+
+The backend currently uses Python 3.12 because Python 3.13 removed `audioop`, which the WAV fallback path still uses.
+
+## Setup
+
+Clone the repository and move into it:
+
+```powershell
+git clone https://github.com/levakat12/VoiT.git D:\VoiT
+cd D:\VoiT
+```
+
+Create your environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Install and start the backend:
+
+```powershell
+cd D:\VoiT\backend
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 8100
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8100
 ```
 
-### Frontend
+In a second terminal, install and start the frontend:
 
-```bash
-cd frontend
-npm install
-npm run dev
+```powershell
+cd D:\VoiT
+pnpm install
+pnpm --dir frontend dev --host 127.0.0.1 --port 5173
 ```
 
-Open `http://localhost:5173`.
+Open:
 
-### Docker Compose
-
-```bash
-docker compose up --build
+```text
+http://127.0.0.1:5173/
 ```
 
-## Parakeet Configuration
+The backend health check is:
 
-Set `PARAKEET_API_KEY` and `PARAKEET_API_URL` in `.env` or the deployment environment. Do not commit `.env`.
+```text
+http://127.0.0.1:8100/api/health
+```
 
-```bash
-PARAKEET_API_KEY=your-secret-key
+## Configuration
+
+Most local settings live in `.env`. Do not commit `.env`.
+
+```env
+VOIT_ENV=development
+VOIT_DATABASE_URL=sqlite:///./voit.db
+VOIT_STORAGE_DIR=./storage
+VOIT_MAX_UPLOAD_MB=2048
+VOIT_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+
+PARAKEET_API_KEY=
 PARAKEET_API_URL=http://localhost:9000/v1/audio/transcriptions
+PARAKEET_FUNCTION_ID=
 PARAKEET_LANGUAGE=en-US
+PARAKEET_MODEL=
+PARAKEET_RETRIES=2
+PARAKEET_TIMEOUT_SECONDS=180
 ```
 
-The default API shape follows NVIDIA Speech NIM's HTTP ASR endpoint, `POST /v1/audio/transcriptions`, which accepts `multipart/form-data` with a WAV, OPUS, or FLAC file plus language/model selection. Without a key, VoiT returns a deterministic development transcript so the rest of the app remains usable during local development.
+For a live transcription service, set `PARAKEET_API_KEY` and point `PARAKEET_API_URL` at your Parakeet/NVIDIA ASR endpoint.
+
+For hosted NVIDIA Riva/Parakeet gRPC-style usage, you can also set:
+
+```env
+PARAKEET_FUNCTION_ID=your-function-id
+```
 
 ## Webhooks
 
-Set `VOIT_WEBHOOK_URL` to receive a `transcript.job.finished` event after a background job reaches a final state. Set `VOIT_WEBHOOK_SECRET` to add an `X-VoiT-Signature` HMAC header. Webhook payloads include job metadata but not transcript text.
+VoiT can call a webhook after a job finishes. This is optional.
 
-```bash
+```env
 VOIT_WEBHOOK_URL=https://example.com/voit-webhook
 VOIT_WEBHOOK_SECRET=your-signing-secret
 VOIT_WEBHOOK_RETRIES=2
 VOIT_WEBHOOK_TIMEOUT_SECONDS=10
 ```
 
-## API Summary
+When `VOIT_WEBHOOK_SECRET` is set, VoiT sends an `X-VoiT-Signature` HMAC header. Webhook payloads include job metadata, not the transcript text.
+
+## Running Tests
+
+Backend:
+
+```powershell
+cd D:\VoiT\backend
+.\.venv\Scripts\Activate.ps1
+python -m pytest
+```
+
+Frontend build:
+
+```powershell
+cd D:\VoiT
+pnpm --dir frontend build
+```
+
+## API Overview
+
+The frontend uses the API automatically, but these are the main routes:
 
 - `GET /api/health`
 - `GET /api/settings`
@@ -95,25 +165,28 @@ VOIT_WEBHOOK_TIMEOUT_SECONDS=10
 - `POST /api/uploads`
 - `POST /api/uploads/batch`
 - `GET /api/history`
-- `GET /api/search?q={query}` with optional `project`, `tag`, `status`, `created_from`, `created_to`, `format`, and `include_archived` filters
+- `GET /api/search?q={query}`
 - `GET /api/jobs`
 - `GET /api/jobs/{job_id}`
-- `GET /api/jobs/{job_id}/insights`
-- `GET /api/jobs/{job_id}/insights/exports/{format}` where `format` is `json`, `txt`, or `md`
 - `POST /api/jobs/{job_id}/retry`
 - `POST /api/jobs/{job_id}/pause`
 - `POST /api/jobs/{job_id}/resume`
 - `POST /api/jobs/{job_id}/cancel`
-- `PATCH /api/jobs/{job_id}/organization`
-- `PATCH /api/jobs/organization/bulk`
-- `GET /api/transcript/{job_id}`
-- `DELETE /api/transcript/{job_id}`
 - `PATCH /api/jobs/{job_id}/transcript`
-- `POST /api/export`
+- `GET /api/jobs/{job_id}/insights`
 - `GET /api/jobs/{job_id}/exports/{format}`
+- `POST /api/export`
 
-SRT/VTT exports accept optional subtitle controls:
+Search supports filters such as project, tag, status, date range, format, and archived state.
 
-- `subtitle_max_chars` between 10 and 120
-- `subtitle_max_duration` between 0.5 and 30 seconds
-- `subtitle_max_lines` between 1 and 4
+Subtitle exports support optional controls for cue length, duration, and line count.
+
+## Docker
+
+The repository includes Docker files, so the app can also be started with:
+
+```powershell
+docker compose up --build
+```
+
+For day-to-day development on Windows, the two-terminal local setup above is usually easier to debug.
