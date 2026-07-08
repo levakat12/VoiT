@@ -1,7 +1,10 @@
 import audioop
 import json
+import os
+import shutil
 import subprocess
 import wave
+from functools import lru_cache
 from pathlib import Path
 
 SUPPORTED_EXTENSIONS = {
@@ -37,7 +40,7 @@ def validate_media_file(filename: str, file_size: int, max_upload_bytes: int) ->
 
 def ensure_readable_media(path: Path) -> None:
     command = [
-        "ffprobe",
+        _media_binary("ffprobe"),
         "-v",
         "error",
         "-select_streams",
@@ -67,7 +70,7 @@ def ensure_readable_media(path: Path) -> None:
 
 def extract_metadata(path: Path) -> dict[str, int | float | None]:
     command = [
-        "ffprobe",
+        _media_binary("ffprobe"),
         "-v",
         "error",
         "-show_entries",
@@ -101,7 +104,7 @@ def extract_metadata(path: Path) -> dict[str, int | float | None]:
 def normalize_audio(input_path: Path, output_path: Path, sample_rate: int) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        "ffmpeg",
+        _media_binary("ffmpeg"),
         "-y",
         "-i",
         str(input_path),
@@ -128,6 +131,44 @@ def normalize_audio(input_path: Path, output_path: Path, sample_rate: int) -> Pa
         raise MediaProcessingError(reason) from exc
 
     return output_path
+
+
+@lru_cache
+def _media_binary(name: str) -> str:
+    env_name = f"{name.upper()}_BINARY"
+    configured = os.environ.get(env_name) or os.environ.get(f"VOIT_{env_name}")
+    if configured:
+        return configured
+
+    resolved = shutil.which(name)
+    if resolved:
+        return resolved
+
+    executable = f"{name}.exe"
+    for root in _media_binary_roots():
+        match = next(root.glob(f"**/{executable}"), None)
+        if match is not None:
+            return str(match)
+    return name
+
+
+def _media_binary_roots() -> list[Path]:
+    roots = []
+    for value in (
+        os.environ.get("LOCALAPPDATA"),
+        os.environ.get("ChocolateyInstall"),
+    ):
+        if not value:
+            continue
+        base = Path(value)
+        roots.extend(
+            [
+                base / "Microsoft" / "WinGet" / "Packages",
+                base / "bin",
+                base / "lib",
+            ]
+        )
+    return [root for root in roots if root.exists()]
 
 
 def _is_readable_pcm_wav(path: Path) -> bool:
