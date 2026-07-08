@@ -10,13 +10,14 @@ Implemented in this starter version:
 - Corrupted or unreadable media detection when FFmpeg is available.
 - Audio extraction and normalization to mono 16 kHz WAV.
 - Transcription service boundary for Parakeet/NVIDIA ASR HTTP APIs.
-- Processing stage, progress percentage, processing time, and export history tracking.
+- Processing stage, progress bar, processing time, and export history tracking.
 - Simple transcript viewer workflow.
 - Editable transcript persistence.
 - TXT, DOCX, PDF, JSON, SRT, and VTT exports.
 - Text-window export format selector and download control.
+- Text-window copy control for transcript text.
 - SRT/VTT subtitle cue length, duration, and line-count controls.
-- History list with a compact recent-transcripts picker and search field in the upload window.
+- History list with a compact recent-transcripts picker, search field, and matching snippets in the upload window.
 - Spec-compatible REST aliases for upload, history, transcript lookup, transcript delete, and export.
 - Retry endpoint for failed or completed transcription jobs.
 - Cancel endpoint with cooperative cancellation checks during processing.
@@ -39,7 +40,7 @@ Implemented:
 
 - Backend batch upload endpoint through `POST /api/uploads/batch`.
 - Pause and resume endpoints for queued or running jobs.
-- Dedicated pause, resume, and cancel controls in the frontend upload window.
+- Dedicated pause, resume, retry, and cancel controls in the frontend upload window.
 - Browser desktop notifications when active jobs complete, fail, or are canceled.
 
 ## Phase 3: AI Enhancement

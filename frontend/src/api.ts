@@ -1,6 +1,7 @@
 import type { JobListItem, JobRead, SearchResult, TranscriptSegment } from "./types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8100/api";
+const DEFAULT_API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8100/api`;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, init);
@@ -41,6 +42,12 @@ export function pauseJob(id: number): Promise<JobRead> {
 
 export function resumeJob(id: number): Promise<JobRead> {
   return request<JobRead>(`/jobs/${id}/resume`, {
+    method: "POST"
+  });
+}
+
+export function retryJob(id: number): Promise<JobRead> {
+  return request<JobRead>(`/jobs/${id}/retry`, {
     method: "POST"
   });
 }

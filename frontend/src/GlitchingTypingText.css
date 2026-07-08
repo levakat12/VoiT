@@ -1,0 +1,44 @@
+.glitchingText {
+  position: relative;
+  display: inline;
+  margin: 0;
+  color: #d8ffff;
+  font-family: "Share Tech Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: clamp(15px, 1.35vw, 20px);
+  line-height: 1.65;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  text-shadow:
+    0 0 10px rgba(0, 255, 255, 0.58),
+    0 0 24px rgba(0, 255, 255, 0.24);
+}
+
+.glitchingText.withCaret::after {
+  content: "";
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 4px;
+  transform: translateY(0.16em);
+  border-right: 7px solid currentColor;
+  animation: outputCaretBlink 750ms linear infinite;
+}
+
+@keyframes outputCaretBlink {
+  0%,
+  74% {
+    opacity: 1;
+  }
+
+  25% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glitchingText.withCaret::after {
+    animation: none;
+  }
+}

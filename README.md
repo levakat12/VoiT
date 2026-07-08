@@ -10,18 +10,18 @@ VoiT is an AI video and audio transcription platform. This repository starts the
 - Validate readable audio streams with `ffprobe`.
 - Extract and normalize audio to mono 16 kHz WAV with `ffmpeg`.
 - Send normalized audio through a Parakeet/NVIDIA ASR-compatible service boundary.
-- Track current processing stage, progress percentage, processing time, ETA, speed, and export history.
+- Track current processing stage, progress bar, processing time, ETA, speed, and export history.
 - Expose safe settings metadata without returning secrets.
 - Search across stored transcripts with matching snippets, metadata filters, and a SQLite full-text index.
 - Organize jobs with project, folder, tags, favorite, and archive metadata.
 - Send optional signed webhooks when background transcription jobs finish.
 - Show browser desktop notifications when active jobs finish.
-- Pause, resume, or cancel active jobs from the upload window.
+- Pause, resume, retry, or cancel jobs from the upload window.
 - Recover queued or interrupted jobs when the API starts.
 - Generate local transcript insights: cleanup text, summary, chapters, keywords, and speaker analytics.
 - Use a development transcript fallback when no Parakeet API key is configured.
-- Reopen recent transcripts and search stored transcripts from the upload window.
-- View, search, edit, save, and download transcript exports from the text window.
+- Reopen recent transcripts and search stored transcripts with snippets from the upload window.
+- View, search, copy, edit, save, and download transcript exports from the text window.
 - Generate TXT, DOCX, PDF, JSON, SRT, and VTT exports.
 - Tune SRT/VTT exports with maximum cue characters, duration, and line count.
 

@@ -1,5 +1,7 @@
+import audioop
 import json
 import subprocess
+import wave
 from pathlib import Path
 
 SUPPORTED_EXTENSIONS = {
@@ -49,6 +51,8 @@ def ensure_readable_media(path: Path) -> None:
     try:
         result = subprocess.run(command, capture_output=True, check=True, text=True, timeout=30)
     except FileNotFoundError as exc:
+        if _is_readable_pcm_wav(path):
+            return
         raise MediaProcessingError("FFmpeg is required for media validation.") from exc
     except subprocess.TimeoutExpired as exc:
         raise MediaProcessingError("Media validation timed out.") from exc
@@ -74,7 +78,12 @@ def extract_metadata(path: Path) -> dict[str, int | float | None]:
     ]
     try:
         result = subprocess.run(command, capture_output=True, check=True, text=True, timeout=30)
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except FileNotFoundError:
+        wav_metadata = _extract_wav_metadata(path)
+        if wav_metadata is not None:
+            return wav_metadata
+        return {"duration_seconds": None, "sample_rate": None, "channels": None}
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return {"duration_seconds": None, "sample_rate": None, "channels": None}
 
     payload = json.loads(result.stdout or "{}")
@@ -107,12 +116,61 @@ def normalize_audio(input_path: Path, output_path: Path, sample_rate: int) -> Pa
     ]
     try:
         subprocess.run(command, capture_output=True, check=True, text=True, timeout=600)
-    except FileNotFoundError as exc:
-        raise MediaProcessingError("FFmpeg is required for audio extraction.") from exc
+    except FileNotFoundError:
+        try:
+            return _normalize_wav_audio(input_path, output_path, sample_rate)
+        except wave.Error as wav_exc:
+            raise MediaProcessingError("FFmpeg is required for audio extraction.") from wav_exc
     except subprocess.TimeoutExpired as exc:
         raise MediaProcessingError("Audio extraction timed out.") from exc
     except subprocess.CalledProcessError as exc:
         reason = (exc.stderr or "").strip() or "Audio extraction failed."
         raise MediaProcessingError(reason) from exc
 
+    return output_path
+
+
+def _is_readable_pcm_wav(path: Path) -> bool:
+    try:
+        with wave.open(str(path), "rb") as wav:
+            return wav.getnframes() > 0 and wav.getsampwidth() in {1, 2, 3, 4}
+    except (wave.Error, FileNotFoundError, OSError):
+        return False
+
+
+def _extract_wav_metadata(path: Path) -> dict[str, int | float | None] | None:
+    try:
+        with wave.open(str(path), "rb") as wav:
+            frame_count = wav.getnframes()
+            sample_rate = wav.getframerate()
+            return {
+                "duration_seconds": frame_count / sample_rate if sample_rate else None,
+                "sample_rate": sample_rate,
+                "channels": wav.getnchannels(),
+            }
+    except (wave.Error, FileNotFoundError, OSError):
+        return None
+
+
+def _normalize_wav_audio(input_path: Path, output_path: Path, sample_rate: int) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(input_path), "rb") as source:
+        source_channels = source.getnchannels()
+        source_rate = source.getframerate()
+        sample_width = source.getsampwidth()
+        audio = source.readframes(source.getnframes())
+
+    if sample_width != 2:
+        audio = audioop.lin2lin(audio, sample_width, 2)
+        sample_width = 2
+    if source_channels > 1:
+        audio = audioop.tomono(audio, sample_width, 0.5, 0.5)
+    if source_rate != sample_rate:
+        audio, _state = audioop.ratecv(audio, sample_width, 1, source_rate, sample_rate, None)
+
+    with wave.open(str(output_path), "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(sample_rate)
+        target.writeframes(audio)
     return output_path

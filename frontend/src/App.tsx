@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Download, Loader2, Pause, Play, RefreshCw, Save, Search, Upload, X } from "lucide-react";
+import { Clipboard, Download, Loader2, Pause, Play, RefreshCw, RotateCcw, Save, Search, Upload, X } from "lucide-react";
 import {
   cancelJob,
   exportUrl,
@@ -7,10 +7,15 @@ import {
   listJobs,
   pauseJob,
   resumeJob,
+  retryJob,
   saveTranscript,
   searchTranscripts,
   uploadMedia,
 } from "./api";
+import ASCIIText from "./ASCIIText";
+import BorderGlow from "./BorderGlow";
+import FaultyTerminal from "./FaultyTerminal";
+import GlassSurface from "./GlassSurface";
 import type { JobListItem, JobRead, SearchResult } from "./types";
 
 type ExportFormat = "txt" | "docx" | "pdf" | "json" | "srt" | "vtt";
@@ -65,6 +70,44 @@ export default function App() {
     showJobNotification(job);
   }, [job]);
 
+  useEffect(() => {
+    const selector = ".uploadButton, .saveButton, .iconButton, .smallIconButton, .exportButton, .recentJob";
+
+    function targetFromEvent(event: Event): HTMLElement | null {
+      const target = event.target;
+      if (!(target instanceof Element)) return null;
+
+      const element = target.closest<HTMLElement>(selector);
+      if (!element) return null;
+      if (element instanceof HTMLButtonElement && element.disabled) return null;
+      return element;
+    }
+
+    function activate(event: Event) {
+      targetFromEvent(event)?.classList.add("buttonPixelActive");
+    }
+
+    function deactivate(event: Event) {
+      const element = targetFromEvent(event);
+      if (!element) return;
+
+      if ("relatedTarget" in event && event.relatedTarget instanceof Node && element.contains(event.relatedTarget)) return;
+      element.classList.remove("buttonPixelActive");
+    }
+
+    document.addEventListener("pointerover", activate);
+    document.addEventListener("pointerout", deactivate);
+    document.addEventListener("focusin", activate);
+    document.addEventListener("focusout", deactivate);
+
+    return () => {
+      document.removeEventListener("pointerover", activate);
+      document.removeEventListener("pointerout", deactivate);
+      document.removeEventListener("focusin", activate);
+      document.removeEventListener("focusout", deactivate);
+    };
+  }, []);
+
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
@@ -101,7 +144,7 @@ export default function App() {
     await refreshJobs();
   }
 
-  async function handleJobAction(action: "pause" | "resume" | "cancel") {
+  async function handleJobAction(action: "pause" | "resume" | "retry" | "cancel") {
     if (!job) return;
 
     try {
@@ -110,11 +153,16 @@ export default function App() {
           ? await pauseJob(job.id)
           : action === "resume"
             ? await resumeJob(job.id)
-            : await cancelJob(job.id);
+            : action === "retry"
+              ? await retryJob(job.id)
+              : await cancelJob(job.id);
       setJob(nextJob);
       setMessage(statusMessage(nextJob));
       await refreshJobs();
-      if (!isDirty) {
+      if (action === "retry") {
+        setDirty(false);
+        setText(nextJob.transcript_text);
+      } else if (!isDirty) {
         setText(nextJob.transcript_text);
       }
     } catch (error) {
@@ -162,30 +210,99 @@ export default function App() {
     window.open(exportUrl(job.id, exportFormat), "_blank", "noopener,noreferrer");
   }
 
+  async function handleCopy() {
+    if (!text.trim()) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("Copied");
+    } catch {
+      setMessage("Copy unavailable");
+    }
+  }
+
   return (
     <main className="appShell">
-      <section className="window uploadWindow">
-        <div>
-          <h1>VoiT</h1>
-          <p>{message}</p>
+      <div className="backgroundLayer" aria-hidden="true">
+        <FaultyTerminal
+          scale={1.5}
+          gridMul={[2, 1]}
+          digitSize={1.2}
+          timeScale={0.5}
+          pause={false}
+          scanlineIntensity={0.5}
+          glitchAmount={1}
+          flickerAmount={1}
+          noiseAmp={1}
+          chromaticAberration={0}
+          dither={0}
+          curvature={0.1}
+          tint="#ffffff"
+          mouseReact
+          mouseStrength={0.5}
+          pageLoadAnimation={false}
+          brightness={0.6}
+        />
+      </div>
+      <header className="navReserve" aria-label="VoiT">
+        <div className="logoMark" aria-hidden="true">
+          <ASCIIText text="VoiT" />
         </div>
+      </header>
+      <div className="workspace">
+        <GlassSurface
+          className="tileSurface uploadTile"
+          borderRadius={18}
+          backgroundOpacity={0.18}
+          saturation={1.55}
+          brightness={18}
+          opacity={0.88}
+          blur={14}
+          displace={0.42}
+          distortionScale={-95}
+          redOffset={0}
+          greenOffset={0}
+          blueOffset={0}
+        >
+          <BorderGlow className="tileCornerGlow" edgeSensitivity={28} glowColor="0 0 92" borderRadius={18} glowRadius={46} glowIntensity={0.7} coneSpread={24} animated>
+          <section className="window uploadWindow">
+            <div>
+              <h1>Upload</h1>
+              <p>{message}</p>
+            </div>
 
-        <label className="uploadButton">
-          {isUploading || job?.status === "running" || job?.status === "pending" ? (
-            <Loader2 className="spin" size={20} />
-          ) : (
-            <Upload size={20} />
-          )}
-          <span>Upload</span>
-          <input
-            type="file"
-            multiple
-            accept=".mp4,.mov,.mkv,.avi,.webm,.mp3,.wav,.flac,.m4a,.aac"
-            onChange={handleUpload}
-          />
-        </label>
+            <label className="uploadButton">
+              {isUploading || job?.status === "running" || job?.status === "pending" ? (
+                <Loader2 className="spin" size={20} />
+              ) : (
+                <Upload size={20} />
+              )}
+              <span>Upload</span>
+              <input
+                type="file"
+                multiple
+                accept=".mp4,.mov,.mkv,.avi,.webm,.mp3,.wav,.flac,.m4a,.aac"
+                onChange={handleUpload}
+              />
+            </label>
 
         <div className="fileName">{job?.filename ?? "No file selected"}</div>
+
+        {job && shouldShowProgress(job.status) ? (
+          <div
+            className="progressBlock"
+            role="progressbar"
+            aria-label="Transcription progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={clampedProgress(job.progress_percent)}
+          >
+            <div className="progressTrack">
+              <div className="progressFill" style={{ width: `${clampedProgress(job.progress_percent)}%` }} />
+            </div>
+            <span>{job.progress_percent}%</span>
+          </div>
+        ) : null}
 
         {job && !isFinalStatus(job.status) ? (
           <div className="jobControls">
@@ -208,6 +325,20 @@ export default function App() {
               aria-label="Cancel"
             >
               <X size={18} />
+            </button>
+          </div>
+        ) : null}
+
+        {job && isRetryableStatus(job.status) ? (
+          <div className="jobControls">
+            <button
+              type="button"
+              className="iconButton"
+              onClick={() => void handleJobAction("retry")}
+              title="Retry"
+              aria-label="Retry transcription"
+            >
+              <RotateCcw size={18} />
             </button>
           </div>
         ) : null}
@@ -260,8 +391,11 @@ export default function App() {
                     onClick={() => void handleSelectJob(item.job_id)}
                     title={item.filename}
                   >
-                    <span>{item.filename}</span>
-                    <small>{statusLabel(item.status)}</small>
+                    <span className="recentJobText">
+                      <span>{item.filename}</span>
+                      <small>{searchSnippet(item)}</small>
+                    </span>
+                    <small>{item.match_count === 1 ? "1 match" : `${item.match_count} matches`}</small>
                   </button>
                 ))
               ) : (
@@ -285,53 +419,90 @@ export default function App() {
             )}
           </div>
         </div>
-      </section>
+          </section>
+          </BorderGlow>
+        </GlassSurface>
 
-      <section className="window textWindow">
-        <div className="textHeader">
-          <h2>Text</h2>
-          <div className="textActions">
-            <select
-              className="exportSelect"
-              value={exportFormat}
-              onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
-              aria-label="Export format"
-              disabled={!job || job.status !== "completed"}
-            >
-              <option value="txt">TXT</option>
-              <option value="docx">DOCX</option>
-              <option value="pdf">PDF</option>
-              <option value="json">JSON</option>
-              <option value="srt">SRT</option>
-              <option value="vtt">VTT</option>
-            </select>
-            <button
-              className="exportButton"
-              onClick={handleExport}
-              disabled={!job || job.status !== "completed"}
-              title="Download"
-              aria-label="Download transcript"
-            >
-              <Download size={18} />
-            </button>
-            <button className="saveButton" onClick={() => void handleSave()} disabled={!job || !isDirty}>
-              <Save size={18} />
-              <span>Save</span>
-            </button>
-          </div>
-        </div>
+        <GlassSurface
+          className="tileSurface textTile"
+          borderRadius={18}
+          backgroundOpacity={0.18}
+          saturation={1.55}
+          brightness={18}
+          opacity={0.88}
+          blur={14}
+          displace={0.42}
+          distortionScale={-95}
+          redOffset={0}
+          greenOffset={0}
+          blueOffset={0}
+        >
+          <BorderGlow className="tileCornerGlow" edgeSensitivity={28} glowColor="0 0 92" borderRadius={18} glowRadius={46} glowIntensity={0.7} coneSpread={24} animated>
+          <section className="window textWindow">
+            <div className="textHeader">
+              <h2>Text</h2>
+              <div className="textActions">
+                <select
+                  className="exportSelect"
+                  value={exportFormat}
+                  onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                  aria-label="Export format"
+                  disabled={!job || job.status !== "completed"}
+                >
+                  <option value="txt">TXT</option>
+                  <option value="docx">DOCX</option>
+                  <option value="pdf">PDF</option>
+                  <option value="json">JSON</option>
+                  <option value="srt">SRT</option>
+                  <option value="vtt">VTT</option>
+                </select>
+                <button
+                  className="exportButton"
+                  onClick={() => void handleCopy()}
+                  disabled={!text.trim()}
+                  title="Copy"
+                  aria-label="Copy transcript"
+                >
+                  <Clipboard size={18} />
+                </button>
+                <button
+                  className="exportButton"
+                  onClick={handleExport}
+                  disabled={!job || job.status !== "completed"}
+                  title="Download"
+                  aria-label="Download transcript"
+                >
+                  <Download size={18} />
+                </button>
+                <button className="saveButton" onClick={() => void handleSave()} disabled={!job || !isDirty}>
+                  <Save size={18} />
+                  <span>Save</span>
+                </button>
+              </div>
+            </div>
 
-        <textarea
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-            setDirty(true);
-          }}
-          placeholder="Transcript will appear here."
-        />
-      </section>
+            <div className="outputStage">
+              <textarea
+                className="outputEditor"
+                value={text}
+                onChange={(event) => {
+                  setText(event.target.value);
+                  setDirty(true);
+                }}
+                placeholder="Transcript will appear here."
+                aria-label="Transcript output"
+              />
+            </div>
+          </section>
+          </BorderGlow>
+        </GlassSurface>
+      </div>
     </main>
   );
+}
+
+function searchSnippet(result: SearchResult): string {
+  return result.snippets[0] || statusLabel(result.status);
 }
 
 function statusLabel(status: JobRead["status"]): string {
@@ -349,6 +520,18 @@ function isFinalStatus(status: JobRead["status"]): boolean {
 
 function isActiveStatus(status: JobRead["status"]): boolean {
   return status === "pending" || status === "running";
+}
+
+function isRetryableStatus(status: JobRead["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "canceled";
+}
+
+function shouldShowProgress(status: JobRead["status"]): boolean {
+  return status === "pending" || status === "running" || status === "paused";
+}
+
+function clampedProgress(progress: number): number {
+  return Math.min(100, Math.max(0, progress));
 }
 
 function statusMessage(job: JobRead): string {
