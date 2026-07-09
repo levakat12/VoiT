@@ -129,6 +129,11 @@ class UploadBatchResponse(BaseModel):
     jobs: list[JobRead]
 
 
+class UploadUrlRequest(BaseModel):
+    url: str
+    filename: str | None = None
+
+
 ExportFormat = Literal["txt", "docx", "pdf", "json", "srt", "vtt"]
 
 

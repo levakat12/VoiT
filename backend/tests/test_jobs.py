@@ -8,6 +8,9 @@ from app.models import JobStatus, TranscriptJob
 from app.routers.jobs import (
     _apply_organization_update,
     _build_search_result,
+    _download_filename,
+    _ensure_public_host,
+    _extension_from_content_type,
     get_transcript_insights,
     _job_matches_format,
     _job_matches_filters,
@@ -25,6 +28,7 @@ from app.routers.jobs import (
     upload_files_batch,
 )
 from app.schemas import OrganizationUpdate
+from app.services.link_downloads import _safe_media_filename, is_youtube_host
 
 
 class FakeScalarResult:
@@ -261,6 +265,70 @@ def test_batch_upload_limits_file_count() -> None:
         asyncio.run(upload_files_batch(BackgroundTasks(), files, None))  # type: ignore[arg-type]
 
     assert exc_info.value.status_code == 400
+
+
+def test_url_upload_rejects_local_hosts() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        _ensure_public_host("127.0.0.1")
+
+    assert exc_info.value.status_code == 400
+
+
+def test_url_upload_identifies_youtube_hosts() -> None:
+    assert is_youtube_host("youtube.com")
+    assert is_youtube_host("www.youtube.com")
+    assert is_youtube_host("music.youtube.com")
+    assert is_youtube_host("youtu.be")
+    assert not is_youtube_host("example.com")
+
+
+def test_youtube_download_filename_is_safe() -> None:
+    assert _safe_media_filename("My Video: Intro/Outro?", ".webm") == "My_Video_Intro_Outro.webm"
+
+
+def test_url_upload_builds_safe_filename_from_url() -> None:
+    from urllib.parse import urlparse
+
+    filename = _download_filename(
+        requested_filename=None,
+        parsed_url=urlparse("https://example.com/media/My%20Clip.MP3"),
+        content_type=None,
+        content_disposition=None,
+    )
+
+    assert filename == "My_Clip.mp3"
+
+
+def test_url_upload_uses_content_type_when_url_has_no_extension() -> None:
+    from urllib.parse import urlparse
+
+    filename = _download_filename(
+        requested_filename=None,
+        parsed_url=urlparse("https://example.com/download?id=1"),
+        content_type="audio/mpeg",
+        content_disposition=None,
+    )
+
+    assert filename == "download.mp3"
+
+
+def test_url_upload_prefers_content_disposition_filename() -> None:
+    from urllib.parse import urlparse
+
+    filename = _download_filename(
+        requested_filename=None,
+        parsed_url=urlparse("https://example.com/download"),
+        content_type="audio/wav",
+        content_disposition='attachment; filename="meeting notes.wav"',
+    )
+
+    assert filename == "meeting_notes.wav"
+
+
+def test_url_upload_maps_common_media_content_types() -> None:
+    assert _extension_from_content_type("audio/mp4; charset=binary") == ".m4a"
+    assert _extension_from_content_type("video/x-matroska") == ".mkv"
+    assert _extension_from_content_type("audio/x-wav") == ".wav"
 
 
 def test_safe_export_basename_removes_header_unfriendly_characters() -> None:

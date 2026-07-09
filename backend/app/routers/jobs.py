@@ -1,10 +1,15 @@
 import json
+import ipaddress
+import mimetypes
 import re
+import socket
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
+from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -27,22 +32,45 @@ from app.schemas import (
     TranscriptUpdate,
     UploadBatchResponse,
     UploadResponse,
+    UploadUrlRequest,
 )
 from app.services.exports import build_export
 from app.services.insights import build_insights_export, build_transcript_insights
 from app.services.media import (
     MediaValidationError,
+    SUPPORTED_EXTENSIONS,
     ensure_readable_media,
     extract_metadata,
     normalize_audio,
     validate_media_file,
 )
 from app.services.parakeet import transcribe_media
+from app.services.link_downloads import LinkDownloadError, download_youtube_audio, is_youtube_host
 from app.services.search_index import delete_job_search_index, search_index_job_ids, sync_job_search_index
 from app.services.subtitles import SubtitleOptions
 from app.services.webhooks import deliver_job_webhook
 
 router = APIRouter()
+
+MEDIA_TYPE_EXTENSIONS = {
+    "audio/aac": ".aac",
+    "audio/flac": ".flac",
+    "audio/m4a": ".m4a",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/mpeg": ".mp3",
+    "audio/wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/webm": ".webm",
+    "audio/x-m4a": ".m4a",
+    "audio/x-wav": ".wav",
+    "video/mp4": ".mp4",
+    "video/msvideo": ".avi",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+    "video/x-matroska": ".mkv",
+    "video/x-msvideo": ".avi",
+}
 
 
 class JobCanceled(RuntimeError):
@@ -86,6 +114,18 @@ async def upload_files_batch(
     return UploadBatchResponse(jobs=[_job_to_schema(job) for job in jobs])
 
 
+@router.post("/uploads/url", response_model=UploadResponse)
+async def upload_from_url(
+    request: UploadUrlRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> UploadResponse:
+    job = await _create_url_upload_job(request, db, settings)
+    background_tasks.add_task(process_job, job.id)
+    return UploadResponse(job=_job_to_schema(job))
+
+
 async def _create_upload_job(
     file: UploadFile,
     db: Session,
@@ -125,6 +165,182 @@ async def _create_upload_job(
     db.commit()
     db.refresh(job)
     return job
+
+
+async def _create_url_upload_job(
+    request: UploadUrlRequest,
+    db: Session,
+    settings: Settings,
+) -> TranscriptJob:
+    parsed = _validated_remote_media_url(request.url)
+    upload_dir = settings.storage_dir / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    if is_youtube_host(parsed.hostname or ""):
+        return _create_youtube_upload_job(request.url, upload_dir, db, settings)
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60.0)) as client:
+        try:
+            async with client.stream("GET", parsed.geturl()) as response:
+                response.raise_for_status()
+                final_url = _validated_remote_media_url(str(response.url))
+                filename = _download_filename(request.filename, final_url, response.headers.get("content-type"), response.headers.get("content-disposition"))
+                suffix = Path(filename).suffix.lower()
+                stored_name = f"{uuid4().hex}{suffix}"
+                path = upload_dir / stored_name
+                size = 0
+                with path.open("wb") as target:
+                    async for chunk in response.aiter_bytes(1024 * 1024):
+                        if not chunk:
+                            continue
+                        size += len(chunk)
+                        if size > settings.max_upload_bytes:
+                            target.close()
+                            path.unlink(missing_ok=True)
+                            raise HTTPException(status_code=413, detail="Remote file exceeds upload size limit.")
+                        target.write(chunk)
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(status_code=400, detail=f"Remote URL returned {exc.response.status_code}.") from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=400, detail="Remote URL could not be downloaded.") from exc
+
+    try:
+        validate_media_file(filename, size, settings.max_upload_bytes)
+    except MediaValidationError as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "That link did not point to a supported direct media file. Use a URL that serves "
+                f"one of these formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}."
+            ),
+        ) from exc
+
+    job = TranscriptJob(
+        filename=filename,
+        media_type=response.headers.get("content-type", "application/octet-stream").split(";", 1)[0],
+        file_path=str(path),
+        file_size=size,
+        status=JobStatus.pending,
+        current_stage="Queued",
+        progress_percent=0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def _create_youtube_upload_job(
+    url: str,
+    upload_dir: Path,
+    db: Session,
+    settings: Settings,
+) -> TranscriptJob:
+    try:
+        path, filename, media_type = download_youtube_audio(url, upload_dir, settings.max_upload_bytes)
+        validate_media_file(filename, path.stat().st_size, settings.max_upload_bytes)
+    except LinkDownloadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except MediaValidationError as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The YouTube audio was downloaded, but its format is not supported yet. "
+                f"Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}."
+            ),
+        ) from exc
+
+    job = TranscriptJob(
+        filename=filename,
+        media_type=media_type,
+        file_path=str(path),
+        file_size=path.stat().st_size,
+        status=JobStatus.pending,
+        current_stage="Queued",
+        progress_percent=0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def _validated_remote_media_url(url: str):
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://.")
+    _ensure_public_host(parsed.hostname)
+    return parsed
+
+
+def _ensure_public_host(hostname: str) -> None:
+    try:
+        addresses = [ipaddress.ip_address(hostname)]
+    except ValueError:
+        try:
+            address_info = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+        except socket.gaierror as exc:
+            raise HTTPException(status_code=400, detail="URL host could not be resolved.") from exc
+        addresses = [ipaddress.ip_address(item[4][0]) for item in address_info]
+
+    if not addresses or any(
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_reserved
+        or address.is_unspecified
+        for address in addresses
+    ):
+        raise HTTPException(status_code=400, detail="URL host is not allowed.")
+
+
+def _download_filename(
+    requested_filename: str | None,
+    parsed_url,
+    content_type: str | None,
+    content_disposition: str | None,
+) -> str:
+    candidates = [
+        requested_filename,
+        _filename_from_content_disposition(content_disposition),
+        unquote(Path(parsed_url.path).name),
+    ]
+    filename = next((candidate.strip() for candidate in candidates if candidate and candidate.strip()), "remote-media")
+    filename = Path(filename).name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS and content_type:
+        guessed = _extension_from_content_type(content_type)
+        if guessed in SUPPORTED_EXTENSIONS:
+            filename = f"{Path(filename).stem or 'remote-media'}{guessed}"
+    return _safe_download_filename(filename)
+
+
+def _extension_from_content_type(content_type: str) -> str | None:
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    return MEDIA_TYPE_EXTENSIONS.get(media_type) or mimetypes.guess_extension(media_type)
+
+
+def _filename_from_content_disposition(header: str | None) -> str | None:
+    if not header:
+        return None
+    utf8_match = re.search(r"filename\*\s*=\s*UTF-8''([^;]+)", header, flags=re.IGNORECASE)
+    if utf8_match:
+        return unquote(utf8_match.group(1).strip().strip('"'))
+    match = re.search(r'filename\s*=\s*"([^"]+)"', header, flags=re.IGNORECASE)
+    if match:
+        return match.group(1)
+    match = re.search(r"filename\s*=\s*([^;]+)", header, flags=re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip('"')
+    return None
+
+
+def _safe_download_filename(filename: str) -> str:
+    path = Path(filename)
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", path.stem).strip("._-") or "remote-media"
+    return f"{stem}{path.suffix.lower()}"
 
 
 @router.patch("/jobs/organization/bulk", response_model=OrganizationBulkResult)

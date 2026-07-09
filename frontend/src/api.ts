@@ -6,10 +6,27 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, init);
   if (!response.ok) {
-    const message = await response.text();
+    const message = await errorMessage(response);
     throw new Error(message || `Request failed with ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+async function errorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  if (!text) return "";
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown };
+    if (typeof payload.detail === "string") {
+      return payload.detail;
+    }
+    if (Array.isArray(payload.detail)) {
+      return payload.detail.map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join("; ");
+    }
+  } catch {
+    return text;
+  }
+  return text;
 }
 
 export async function uploadMedia(file: File): Promise<JobRead> {
@@ -18,6 +35,17 @@ export async function uploadMedia(file: File): Promise<JobRead> {
   const payload = await request<{ job: JobRead }>("/uploads", {
     method: "POST",
     body
+  });
+  return payload.job;
+}
+
+export async function uploadMediaUrl(url: string): Promise<JobRead> {
+  const payload = await request<{ job: JobRead }>("/uploads/url", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ url })
   });
   return payload.job;
 }

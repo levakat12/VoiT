@@ -11,6 +11,7 @@ import {
   saveTranscript,
   searchTranscripts,
   uploadMedia,
+  uploadMediaUrl,
 } from "./api";
 import ASCIIText from "./ASCIIText";
 import BorderGlow from "./BorderGlow";
@@ -25,6 +26,7 @@ export default function App() {
   const [text, setText] = useState("");
   const [jobs, setJobs] = useState<JobListItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("txt");
   const [isDirty, setDirty] = useState(false);
@@ -131,6 +133,30 @@ export default function App() {
     } finally {
       setUploading(false);
       event.target.value = "";
+    }
+  }
+
+  async function handleUrlUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = mediaUrl.trim();
+    if (!url) return;
+
+    requestNotificationPermission();
+    setUploading(true);
+    setMessage("Reading link...");
+    setDirty(false);
+
+    try {
+      const nextJob = await uploadMediaUrl(url);
+      setJob(nextJob);
+      setText(nextJob.transcript_text);
+      setMessage(statusMessage(nextJob));
+      setMediaUrl("");
+      await refreshJobs();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Link upload failed.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -285,6 +311,22 @@ export default function App() {
                 onChange={handleUpload}
               />
             </label>
+
+            <form className="urlUploadForm" onSubmit={(event) => void handleUrlUpload(event)}>
+              <input
+                className="urlInput"
+                type="url"
+                value={mediaUrl}
+                onChange={(event) => setMediaUrl(event.target.value)}
+                placeholder="YouTube or media URL"
+                disabled={isUploading}
+                aria-label="Media link"
+              />
+              <button type="submit" className="uploadButton urlUploadButton" disabled={isUploading || !mediaUrl.trim()}>
+                {isUploading ? <Loader2 className="spin" size={18} /> : <Upload size={18} />}
+                <span>Link</span>
+              </button>
+            </form>
 
         <div className="fileName">{job?.filename ?? "No file selected"}</div>
 
