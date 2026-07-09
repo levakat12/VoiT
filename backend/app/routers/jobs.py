@@ -45,7 +45,7 @@ from app.services.media import (
     validate_media_file,
 )
 from app.services.parakeet import transcribe_media
-from app.services.link_downloads import LinkDownloadError, download_youtube_audio, is_youtube_host
+from app.services.link_downloads import LinkDownloadError, download_link_audio, is_youtube_host
 from app.services.search_index import delete_job_search_index, search_index_job_ids, sync_job_search_index
 from app.services.subtitles import SubtitleOptions
 from app.services.webhooks import deliver_job_webhook
@@ -78,6 +78,10 @@ class JobCanceled(RuntimeError):
 
 
 class JobPaused(RuntimeError):
+    pass
+
+
+class DirectMediaUnsupported(RuntimeError):
     pass
 
 
@@ -176,48 +180,26 @@ async def _create_url_upload_job(
     upload_dir = settings.storage_dir / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     if is_youtube_host(parsed.hostname or ""):
-        return _create_youtube_upload_job(request.url, upload_dir, db, settings)
+        return _create_extracted_link_upload_job(request.url, upload_dir, db, settings)
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60.0)) as client:
-        try:
-            async with client.stream("GET", parsed.geturl()) as response:
-                response.raise_for_status()
-                final_url = _validated_remote_media_url(str(response.url))
-                filename = _download_filename(request.filename, final_url, response.headers.get("content-type"), response.headers.get("content-disposition"))
-                suffix = Path(filename).suffix.lower()
-                stored_name = f"{uuid4().hex}{suffix}"
-                path = upload_dir / stored_name
-                size = 0
-                with path.open("wb") as target:
-                    async for chunk in response.aiter_bytes(1024 * 1024):
-                        if not chunk:
-                            continue
-                        size += len(chunk)
-                        if size > settings.max_upload_bytes:
-                            target.close()
-                            path.unlink(missing_ok=True)
-                            raise HTTPException(status_code=413, detail="Remote file exceeds upload size limit.")
-                        target.write(chunk)
-        except httpx.HTTPStatusError as exc:
-            raise HTTPException(status_code=400, detail=f"Remote URL returned {exc.response.status_code}.") from exc
-        except httpx.RequestError as exc:
-            raise HTTPException(status_code=400, detail="Remote URL could not be downloaded.") from exc
+    try:
+        path, filename, media_type, size = await _download_direct_media(request, parsed, upload_dir, settings)
+    except DirectMediaUnsupported:
+        return _create_extracted_link_upload_job(request.url, upload_dir, db, settings)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=400, detail=f"Remote URL returned {exc.response.status_code}.") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=400, detail="Remote URL could not be downloaded.") from exc
 
     try:
         validate_media_file(filename, size, settings.max_upload_bytes)
-    except MediaValidationError as exc:
+    except MediaValidationError:
         path.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "That link did not point to a supported direct media file. Use a URL that serves "
-                f"one of these formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}."
-            ),
-        ) from exc
+        return _create_extracted_link_upload_job(request.url, upload_dir, db, settings)
 
     job = TranscriptJob(
         filename=filename,
-        media_type=response.headers.get("content-type", "application/octet-stream").split(";", 1)[0],
+        media_type=media_type,
         file_path=str(path),
         file_size=size,
         status=JobStatus.pending,
@@ -230,14 +212,52 @@ async def _create_url_upload_job(
     return job
 
 
-def _create_youtube_upload_job(
+async def _download_direct_media(
+    request: UploadUrlRequest,
+    parsed,
+    upload_dir: Path,
+    settings: Settings,
+) -> tuple[Path, str, str, int]:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60.0)) as client:
+        async with client.stream("GET", parsed.geturl()) as response:
+            response.raise_for_status()
+            final_url = _validated_remote_media_url(str(response.url))
+            content_type = response.headers.get("content-type")
+            filename = _download_filename(
+                request.filename,
+                final_url,
+                content_type,
+                response.headers.get("content-disposition"),
+            )
+            if not _looks_like_direct_media(filename, content_type):
+                raise DirectMediaUnsupported
+
+            suffix = Path(filename).suffix.lower()
+            stored_name = f"{uuid4().hex}{suffix}"
+            path = upload_dir / stored_name
+            size = 0
+            with path.open("wb") as target:
+                async for chunk in response.aiter_bytes(1024 * 1024):
+                    if not chunk:
+                        continue
+                    size += len(chunk)
+                    if size > settings.max_upload_bytes:
+                        target.close()
+                        path.unlink(missing_ok=True)
+                        raise HTTPException(status_code=413, detail="Remote file exceeds upload size limit.")
+                    target.write(chunk)
+    media_type = (content_type or "application/octet-stream").split(";", 1)[0]
+    return path, filename, media_type, size
+
+
+def _create_extracted_link_upload_job(
     url: str,
     upload_dir: Path,
     db: Session,
     settings: Settings,
 ) -> TranscriptJob:
     try:
-        path, filename, media_type = download_youtube_audio(url, upload_dir, settings.max_upload_bytes)
+        path, filename, media_type = download_link_audio(url, upload_dir, settings.max_upload_bytes)
         validate_media_file(filename, path.stat().st_size, settings.max_upload_bytes)
     except LinkDownloadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -246,7 +266,7 @@ def _create_youtube_upload_job(
         raise HTTPException(
             status_code=400,
             detail=(
-                "The YouTube audio was downloaded, but its format is not supported yet. "
+                "The link was downloaded, but its media format is not supported yet. "
                 f"Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}."
             ),
         ) from exc
@@ -264,6 +284,15 @@ def _create_youtube_upload_job(
     db.commit()
     db.refresh(job)
     return job
+
+
+def _looks_like_direct_media(filename: str, content_type: str | None) -> bool:
+    if Path(filename).suffix.lower() in SUPPORTED_EXTENSIONS:
+        return True
+    if not content_type:
+        return False
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    return media_type in MEDIA_TYPE_EXTENSIONS
 
 
 def _validated_remote_media_url(url: str):

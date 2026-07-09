@@ -1,11 +1,11 @@
 # VoiT
 
-VoiT is a simple transcription app for audio and video files. You upload a file, paste a direct media link, or paste a YouTube link, and the transcript appears in the text window on the right. The interface is intentionally small: one upload area, one transcript area, and enough controls to search, save, copy, and export the text without turning the app into a dashboard.
+VoiT is a simple transcription app for audio and video files. You upload a file, paste a direct media link, or paste a supported video-platform link, and the transcript appears in the text window on the right. The interface is intentionally small: one upload area, one transcript area, and enough controls to search, save, copy, and export the text without turning the app into a dashboard.
 
 Behind that simple screen, VoiT does the heavier work for you:
 
 - accepts common audio and video files
-- downloads direct audio/video links and YouTube audio for transcription
+- downloads direct audio/video links and supported `yt-dlp` site audio for transcription
 - checks that the file has a readable audio stream
 - converts the audio to clean mono 16 kHz WAV for transcription
 - sends the normalized audio to a Parakeet/NVIDIA-compatible ASR service
@@ -34,7 +34,7 @@ VoiT accepts:
 .mp4, .mov, .mkv, .avi, .webm, .mp3, .wav, .flac, .m4a, .aac
 ```
 
-The link input accepts direct media URLs that serve one of those file types. It also accepts YouTube links, which VoiT downloads through `yt-dlp` before sending the audio through the normal transcription pipeline. Use this only for videos you own, have permission to process, or are legally allowed to use.
+The link input accepts direct media URLs that serve one of those file types. If a link is not a direct media file, VoiT falls back to `yt-dlp`, which supports YouTube and many other audio/video sites. Use this only for media you own, have permission to process, or are legally allowed to use. Some sites may still fail because of login walls, DRM, rate limits, regional blocks, or extractor changes.
 
 FFmpeg is required for non-WAV files because the backend uses `ffprobe` to inspect media and `ffmpeg` to extract/normalize audio. Simple PCM WAV files can work without FFmpeg, but installing FFmpeg is strongly recommended.
 

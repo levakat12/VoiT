@@ -24,11 +24,11 @@ def is_youtube_host(hostname: str) -> bool:
     return host in YOUTUBE_HOSTS or host.endswith(".youtube.com")
 
 
-def download_youtube_audio(url: str, destination_dir: Path, max_bytes: int) -> tuple[Path, str, str]:
+def download_link_audio(url: str, destination_dir: Path, max_bytes: int) -> tuple[Path, str, str]:
     try:
         import yt_dlp
     except ImportError as exc:
-        raise LinkDownloadError("YouTube links require yt-dlp. Install backend dependencies first.") from exc
+        raise LinkDownloadError("This link requires yt-dlp. Install backend dependencies first.") from exc
 
     destination_dir.mkdir(parents=True, exist_ok=True)
     output_template = str(destination_dir / f"{uuid4().hex}.%(ext)s")
@@ -54,12 +54,12 @@ def download_youtube_audio(url: str, destination_dir: Path, max_bytes: int) -> t
     except LinkDownloadError:
         raise
     except Exception as exc:
-        raise LinkDownloadError("YouTube media could not be downloaded.") from exc
+        raise LinkDownloadError("This link could not be downloaded as audio or video.") from exc
 
     if not downloaded_path.exists():
         matches = sorted(destination_dir.glob(f"{downloaded_path.stem}.*"))
         if not matches:
-            raise LinkDownloadError("YouTube media download did not create a file.")
+            raise LinkDownloadError("The link download did not create a media file.")
         downloaded_path = matches[0]
 
     if downloaded_path.stat().st_size > max_bytes:
@@ -70,6 +70,10 @@ def download_youtube_audio(url: str, destination_dir: Path, max_bytes: int) -> t
     filename = _safe_media_filename(title, downloaded_path.suffix)
     media_type = mimetypes.guess_type(downloaded_path.name)[0] or "application/octet-stream"
     return downloaded_path, filename, media_type
+
+
+def download_youtube_audio(url: str, destination_dir: Path, max_bytes: int) -> tuple[Path, str, str]:
+    return download_link_audio(url, destination_dir, max_bytes)
 
 
 def _safe_media_filename(title: str, suffix: str) -> str:

@@ -1,16 +1,15 @@
-@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
-
 :root {
-  --font-pixel:
-    "Press Start 2P", "Pixelify Sans", "Silkscreen", "OCR A Extended", "Cascadia Mono", "Lucida Console", Monaco,
-    monospace;
+  --font-ui:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
   color: #f1f1f1;
   background: #030303;
-  font-family: var(--font-pixel);
+  font-family: var(--font-ui);
   font-synthesis: none;
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
@@ -52,6 +51,7 @@ select {
   z-index: 0;
   pointer-events: none;
   background: #030303;
+  overflow: hidden;
 }
 
 .backgroundLayer::after {
@@ -63,22 +63,26 @@ select {
     rgba(0, 0, 0, 0.42);
 }
 
+.lineWavesFrame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 100dvw;
+  min-height: 100dvh;
+  opacity: 0.9;
+  filter: saturate(0.78) contrast(1.06);
+}
+
 .navReserve {
   width: min(100%, 1120px);
   min-height: 58px;
   margin: 0 auto;
   position: relative;
-  z-index: 1;
+  z-index: 1000;
   border-radius: 18px;
   display: flex;
   align-items: center;
-}
-
-.logoMark {
-  width: 172px;
-  height: 46px;
-  position: relative;
-  overflow: hidden;
 }
 
 .workspace {
@@ -89,13 +93,14 @@ select {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
 .tileSurface {
   min-width: 0;
   min-height: 0;
+  overflow: visible;
   box-shadow:
     0 24px 70px rgba(0, 0, 0, 0.42),
     0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -103,6 +108,31 @@ select {
 
 .tileCornerGlow {
   border: 0;
+  overflow: visible;
+}
+
+.uploadOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.06), transparent 42%),
+    rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.uploadDialogSurface {
+  width: min(1120px, calc(100vw - 48px));
+  height: min(680px, calc(100vh - 48px));
+  min-height: 0;
+  overflow: visible;
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.56),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .window {
@@ -111,18 +141,19 @@ select {
   height: 100%;
   isolation: isolate;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 18px;
   background:
-    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.16), transparent 36%),
-    radial-gradient(circle at 86% 10%, rgba(180, 180, 180, 0.12), transparent 34%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)),
-    rgba(8, 8, 8, 0.74);
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.07), transparent 36%),
+    radial-gradient(circle at 86% 10%, rgba(180, 180, 180, 0.05), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)),
+    rgba(6, 6, 7, 0.64);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 18px 60px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px) saturate(1.45);
-  -webkit-backdrop-filter: blur(18px) saturate(1.45);
+  backdrop-filter: blur(24px) saturate(1.32);
+  -webkit-backdrop-filter: blur(24px) saturate(1.32);
 }
 
 .window::before {
@@ -132,9 +163,9 @@ select {
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.18), transparent 28%, rgba(255, 255, 255, 0.06) 54%, transparent 72%),
-    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.08), transparent 46%);
-  opacity: 0.62;
+    linear-gradient(120deg, rgba(255, 255, 255, 0.09), transparent 30%, rgba(255, 255, 255, 0.025) 58%, transparent 76%),
+    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.025), transparent 46%);
+  opacity: 0.36;
 }
 
 .window > * {
@@ -151,6 +182,17 @@ select {
   overflow: hidden;
 }
 
+.uploadDialogWindow {
+  max-height: min(680px, calc(100vh - 48px));
+}
+
+.uploadDialogHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 h1,
 h2,
 p {
@@ -159,20 +201,22 @@ p {
 
 h1,
 h2 {
-  font-size: clamp(16px, 1.7vw, 20px);
-  line-height: 1.35;
+  font-size: clamp(18px, 1.7vw, 22px);
+  line-height: 1.2;
   color: #f5f5f5;
   letter-spacing: 0;
+  font-weight: 650;
 }
 
 p,
 .fileName {
   color: rgba(235, 235, 235, 0.68);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
 .uploadButton,
+.uploadActionButton,
 .saveButton {
   min-height: 44px;
   border: 0;
@@ -188,8 +232,8 @@ p,
     linear-gradient(135deg, rgba(245, 245, 245, 0.92), rgba(128, 128, 128, 0.86));
   color: #060606;
   cursor: pointer;
-  font-weight: 700;
-  font-size: 11px;
+  font-weight: 650;
+  font-size: 13px;
   line-height: 1;
   box-shadow:
     0 12px 30px rgba(255, 255, 255, 0.08),
@@ -204,6 +248,11 @@ p,
 .uploadButton:disabled {
   opacity: 0.42;
   cursor: not-allowed;
+}
+
+.uploadActionButton {
+  padding: 0 14px;
+  white-space: nowrap;
 }
 
 .uploadButton input {
@@ -226,7 +275,7 @@ p,
   background: rgba(255, 255, 255, 0.07);
   color: #f2f2f2;
   outline: 0;
-  font-size: 9px;
+  font-size: 13px;
 }
 
 .urlInput::placeholder {
@@ -254,7 +303,7 @@ p,
   align-items: center;
   gap: 8px;
   color: rgba(235, 235, 235, 0.68);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .progressTrack {
@@ -305,141 +354,22 @@ p,
   background: rgba(255, 255, 255, 0.12);
 }
 
-.uploadButton::before,
-.uploadButton::after,
-.saveButton::before,
-.saveButton::after,
-.iconButton::before,
-.iconButton::after,
-.smallIconButton::before,
-.smallIconButton::after,
-.exportButton::before,
-.exportButton::after,
-.recentJob::before,
-.recentJob::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition:
-    opacity 520ms cubic-bezier(0.5, 1, 0.89, 1),
-    transform 520ms cubic-bezier(0.5, 1, 0.89, 1);
-}
-
-.uploadButton::before,
-.saveButton::before,
-.iconButton::before,
-.smallIconButton::before,
-.exportButton::before,
-.recentJob::before {
-  z-index: -1;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.22), transparent 70%);
-  transform: scale(0.78);
-}
-
-.uploadButton::after,
-.saveButton::after,
-.iconButton::after,
-.smallIconButton::after,
-.exportButton::after,
-.recentJob::after {
-  z-index: 0;
-  background-image:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.32) 2px, transparent 2px),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.18) 2px, transparent 2px);
-  background-position: 0 0;
-  background-size: 7px 7px;
-  mix-blend-mode: screen;
-  mask-image: radial-gradient(circle at 50% 50%, black 0 34%, transparent 72%);
-  transform: scale(1.04);
-}
-
-.uploadButton > *,
-.saveButton > *,
-.iconButton > *,
-.smallIconButton > *,
-.exportButton > *,
-.recentJob > * {
-  position: relative;
-  z-index: 1;
-}
-
-.uploadButton:hover::before,
-.uploadButton:focus-within::before,
-.uploadButton.buttonPixelActive::before,
-.saveButton:hover:not(:disabled)::before,
-.saveButton:focus-visible::before,
-.saveButton.buttonPixelActive:not(:disabled)::before,
-.iconButton:hover:not(:disabled)::before,
-.iconButton:focus-visible::before,
-.iconButton.buttonPixelActive:not(:disabled)::before,
-.smallIconButton:hover:not(:disabled)::before,
-.smallIconButton:focus-visible::before,
-.smallIconButton.buttonPixelActive:not(:disabled)::before,
-.exportButton:hover:not(:disabled)::before,
-.exportButton:focus-visible::before,
-.exportButton.buttonPixelActive:not(:disabled)::before,
-.recentJob:hover::before,
-.recentJob:focus-visible::before,
-.recentJob.buttonPixelActive::before {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.uploadButton:hover::after,
-.uploadButton:focus-within::after,
-.uploadButton.buttonPixelActive::after,
-.saveButton:hover:not(:disabled)::after,
-.saveButton:focus-visible::after,
-.saveButton.buttonPixelActive:not(:disabled)::after,
-.iconButton:hover:not(:disabled)::after,
-.iconButton:focus-visible::after,
-.iconButton.buttonPixelActive:not(:disabled)::after,
-.smallIconButton:hover:not(:disabled)::after,
-.smallIconButton:focus-visible::after,
-.smallIconButton.buttonPixelActive:not(:disabled)::after,
-.exportButton:hover:not(:disabled)::after,
-.exportButton:focus-visible::after,
-.exportButton.buttonPixelActive:not(:disabled)::after,
-.recentJob:hover::after,
-.recentJob:focus-visible::after,
-.recentJob.buttonPixelActive::after {
-  opacity: 0.72;
-  animation: buttonPixelShimmer 820ms steps(8) infinite;
-}
-
 .uploadButton:hover,
 .uploadButton:focus-within,
-.uploadButton.buttonPixelActive,
+.uploadActionButton:hover,
+.uploadActionButton:focus-visible,
 .saveButton:hover:not(:disabled),
 .saveButton:focus-visible,
-.saveButton.buttonPixelActive:not(:disabled),
 .iconButton:hover:not(:disabled),
 .iconButton:focus-visible,
-.iconButton.buttonPixelActive:not(:disabled),
 .smallIconButton:hover:not(:disabled),
 .smallIconButton:focus-visible,
-.smallIconButton.buttonPixelActive:not(:disabled),
 .exportButton:hover:not(:disabled),
 .exportButton:focus-visible,
-.exportButton.buttonPixelActive:not(:disabled),
 .recentJob:hover,
-.recentJob:focus-visible,
-.recentJob.buttonPixelActive {
+.recentJob:focus-visible {
   filter: brightness(1.08);
   transform: translateY(-1px);
-}
-
-.saveButton:disabled::before,
-.saveButton:disabled::after,
-.iconButton:disabled::before,
-.iconButton:disabled::after,
-.smallIconButton:disabled::before,
-.smallIconButton:disabled::after,
-.exportButton:disabled::before,
-.exportButton:disabled::after {
-  display: none;
 }
 
 .iconButton:disabled {
@@ -464,8 +394,8 @@ p,
   justify-content: space-between;
   gap: 8px;
   color: rgba(242, 242, 242, 0.82);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .smallIconButton {
@@ -505,7 +435,7 @@ p,
   background: rgba(255, 255, 255, 0.07);
   color: #f2f2f2;
   outline: 0;
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .searchInput::placeholder,
@@ -545,7 +475,7 @@ p,
   background: rgba(255, 255, 255, 0.06);
   color: #f1f1f1;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
   text-align: left;
 }
@@ -574,7 +504,7 @@ p,
 .recentJobText small,
 .emptyRecent {
   color: rgba(235, 235, 235, 0.58);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -607,6 +537,7 @@ p,
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .exportSelect {
@@ -619,7 +550,7 @@ p,
   color: #f2f2f2;
   cursor: pointer;
   outline: 0;
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .exportSelect option {
@@ -641,7 +572,7 @@ p,
   background: rgba(255, 255, 255, 0.07);
   color: #f2f2f2;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .saveButton {
@@ -662,30 +593,12 @@ p,
   position: relative;
   overflow: hidden;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  background:
-    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.14), transparent 36%),
-    radial-gradient(circle at 88% 16%, rgba(150, 150, 150, 0.13), transparent 38%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(7, 7, 7, 0.56);
+  background: rgba(5, 5, 5, 0.28);
 }
 
 .outputStage::before,
 .outputStage::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.outputStage::before {
-  background:
-    linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.1), transparent),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 7px);
-  opacity: 0.36;
-}
-
-.outputStage::after {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  display: none;
 }
 
 .outputEditor {
@@ -702,13 +615,10 @@ p,
   overflow: auto;
   color: #f1f1f1;
   caret-color: #ffffff;
-  font-family: var(--font-pixel);
-  font-size: clamp(9px, 0.82vw, 12px);
-  line-height: 1.95;
+  font-family: var(--font-ui);
+  font-size: clamp(14px, 0.95vw, 16px);
+  line-height: 1.7;
   letter-spacing: 0;
-  text-shadow:
-    0 0 10px rgba(255, 255, 255, 0.34),
-    0 0 24px rgba(255, 255, 255, 0.12);
   z-index: 1;
 }
 
@@ -722,46 +632,6 @@ p,
   }
 }
 
-@keyframes buttonPixelShimmer {
-  0% {
-    background-position: 0 0;
-    filter: brightness(0.92);
-  }
-
-  50% {
-    background-position: 14px 7px;
-    filter: brightness(1.2);
-  }
-
-  100% {
-    background-position: 28px 14px;
-    filter: brightness(0.94);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .uploadButton:hover::after,
-  .uploadButton:focus-within::after,
-  .uploadButton.buttonPixelActive::after,
-  .saveButton:hover:not(:disabled)::after,
-  .saveButton:focus-visible::after,
-  .saveButton.buttonPixelActive:not(:disabled)::after,
-  .iconButton:hover:not(:disabled)::after,
-  .iconButton:focus-visible::after,
-  .iconButton.buttonPixelActive:not(:disabled)::after,
-  .smallIconButton:hover:not(:disabled)::after,
-  .smallIconButton:focus-visible::after,
-  .smallIconButton.buttonPixelActive:not(:disabled)::after,
-  .exportButton:hover:not(:disabled)::after,
-  .exportButton:focus-visible::after,
-  .exportButton.buttonPixelActive:not(:disabled)::after,
-  .recentJob:hover::after,
-  .recentJob:focus-visible::after,
-  .recentJob.buttonPixelActive::after {
-    animation: none;
-  }
-}
-
 @media (max-width: 760px) {
   .appShell {
     min-height: auto;
@@ -772,11 +642,6 @@ p,
 
   .navReserve {
     min-height: 52px;
-  }
-
-  .logoMark {
-    width: 144px;
-    height: 42px;
   }
 
   .workspace {

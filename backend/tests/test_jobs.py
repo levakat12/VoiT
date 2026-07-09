@@ -15,6 +15,7 @@ from app.routers.jobs import (
     _job_matches_format,
     _job_matches_filters,
     _job_matches_search_filters,
+    _looks_like_direct_media,
     _mark_job_canceled,
     _mark_job_paused,
     _normalize_tags,
@@ -329,6 +330,12 @@ def test_url_upload_maps_common_media_content_types() -> None:
     assert _extension_from_content_type("audio/mp4; charset=binary") == ".m4a"
     assert _extension_from_content_type("video/x-matroska") == ".mkv"
     assert _extension_from_content_type("audio/x-wav") == ".wav"
+
+
+def test_url_upload_distinguishes_direct_media_from_webpage() -> None:
+    assert _looks_like_direct_media("clip.mp3", None)
+    assert _looks_like_direct_media("download", "video/mp4")
+    assert not _looks_like_direct_media("watch", "text/html; charset=utf-8")
 
 
 def test_safe_export_basename_removes_header_unfriendly_characters() -> None:
