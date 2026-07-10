@@ -1,10 +1,11 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Clipboard, Download, Loader2, Pause, Play, RefreshCw, RotateCcw, Save, Search, Upload, X } from "lucide-react";
+import { Clock, Clipboard, Download, Loader2, Pause, Play, RefreshCw, RotateCcw, Save, Search, Upload, X } from "lucide-react";
 import {
   cancelJob,
   exportUrl,
   getJob,
   listJobs,
+  mediaUrl as jobMediaUrl,
   pauseJob,
   resumeJob,
   retryJob,
@@ -17,7 +18,7 @@ import BorderGlow from "./BorderGlow";
 import GlassSurface from "./GlassSurface";
 import LineWaves from "./LineWaves";
 import StaggeredMenu from "./StaggeredMenu";
-import type { JobListItem, JobRead, SearchResult } from "./types";
+import type { JobListItem, JobRead, SearchResult, TranscriptSegment } from "./types";
 
 type ExportFormat = "txt" | "docx" | "pdf" | "json" | "srt" | "vtt";
 
@@ -38,8 +39,11 @@ export default function App() {
   const [isSearching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [isUploadOpen, setUploadOpen] = useState(false);
+  const [showTimecodes, setShowTimecodes] = useState(false);
+  const [currentMediaTime, setCurrentMediaTime] = useState(0);
   const [message, setMessage] = useState("Ready");
   const notifiedJobRef = useRef<string | null>(null);
+  const segmentRefs = useRef<Array<HTMLElement | null>>([]);
 
   const refreshJobs = useCallback(async () => {
     const nextJobs = await listJobs();
@@ -78,6 +82,11 @@ export default function App() {
   }, [job]);
 
   useEffect(() => {
+    setCurrentMediaTime(0);
+    segmentRefs.current = [];
+  }, [job?.id]);
+
+  useEffect(() => {
     if (!isUploadOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -87,6 +96,16 @@ export default function App() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isUploadOpen]);
+
+  const captionSegments = buildCaptionSegments(job);
+  const activeCaptionIndex = findActiveSegmentIndex(captionSegments, currentMediaTime);
+  const activeCaption = activeCaptionIndex >= 0 ? captionSegments[activeCaptionIndex] : null;
+  const isVideoMedia = Boolean(job?.media_type.toLowerCase().startsWith("video/"));
+
+  useEffect(() => {
+    if (!showTimecodes || activeCaptionIndex < 0) return;
+    segmentRefs.current[activeCaptionIndex]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeCaptionIndex, showTimecodes]);
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -534,6 +553,17 @@ export default function App() {
                   <option value="vtt">VTT</option>
                 </select>
                 <button
+                  type="button"
+                  className={showTimecodes ? "exportButton active" : "exportButton"}
+                  onClick={() => setShowTimecodes((current) => !current)}
+                  disabled={!captionSegments.length}
+                  title="Show timecodes"
+                  aria-label="Show timecodes"
+                  aria-pressed={showTimecodes}
+                >
+                  <Clock size={18} />
+                </button>
+                <button
                   className="exportButton"
                   onClick={() => void handleCopy()}
                   disabled={!text.trim()}
@@ -559,16 +589,64 @@ export default function App() {
             </div>
 
             <div className="outputStage">
-              <textarea
-                className="outputEditor"
-                value={text}
-                onChange={(event) => {
-                  setText(event.target.value);
-                  setDirty(true);
-                }}
-                placeholder="Transcript will appear here."
-                aria-label="Transcript output"
-              />
+              {showTimecodes && captionSegments.length && job ? (
+                <div className="timecodePanel" aria-label="Synced captions">
+                  <div className="captionPlayer">
+                    {isVideoMedia ? (
+                      <video
+                        key={job.id}
+                        className="mediaPreview"
+                        src={jobMediaUrl(job.id)}
+                        controls
+                        playsInline
+                        onTimeUpdate={(event) => setCurrentMediaTime(event.currentTarget.currentTime)}
+                        onSeeked={(event) => setCurrentMediaTime(event.currentTarget.currentTime)}
+                      />
+                    ) : (
+                      <div className="audioPreview">
+                        <audio
+                          key={job.id}
+                          src={jobMediaUrl(job.id)}
+                          controls
+                          onTimeUpdate={(event) => setCurrentMediaTime(event.currentTarget.currentTime)}
+                          onSeeked={(event) => setCurrentMediaTime(event.currentTarget.currentTime)}
+                        />
+                      </div>
+                    )}
+                    <div className="captionOverlay" aria-live="polite">
+                      {activeCaption?.text || "Play media to sync captions."}
+                    </div>
+                  </div>
+                  <div className="timecodeList" aria-label="Timecoded transcript">
+                    {captionSegments.map((segment, index) => (
+                      <article
+                        className={index === activeCaptionIndex ? "timecodeSegment active" : "timecodeSegment"}
+                        key={`${segment.start}-${segment.end}-${index}`}
+                        ref={(element) => {
+                          segmentRefs.current[index] = element;
+                        }}
+                      >
+                        <div className="timecodeRange">
+                          <span>{formatTimecode(segment.start)}</span>
+                          <span>{formatTimecode(segment.end)}</span>
+                        </div>
+                        <p>{segment.text}</p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  className="outputEditor"
+                  value={text}
+                  onChange={(event) => {
+                    setText(event.target.value);
+                    setDirty(true);
+                  }}
+                  placeholder="Transcript will appear here."
+                  aria-label="Transcript output"
+                />
+              )}
             </div>
           </section>
           </BorderGlow>
@@ -660,4 +738,56 @@ function formatDuration(seconds: number): string {
   const remainder = safeSeconds % 60;
   if (minutes === 0) return `${remainder}s`;
   return `${minutes}m ${remainder.toString().padStart(2, "0")}s`;
+}
+
+function buildCaptionSegments(job: JobRead | null): TranscriptSegment[] {
+  if (!job?.segments.length) return [];
+
+  const orderedSegments = [...job.segments].sort((left, right) => left.start - right.start);
+  const hasUsableTiming = orderedSegments.some((segment) => segment.end > segment.start);
+  if (hasUsableTiming) return orderedSegments;
+
+  const duration = job.duration_seconds ?? 0;
+  if (duration <= 0) return orderedSegments;
+
+  const weights = orderedSegments.map((segment) => Math.max(segment.text.trim().split(/\s+/).filter(Boolean).length, 1));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let cursor = 0;
+
+  return orderedSegments.map((segment, index) => {
+    const isLast = index === orderedSegments.length - 1;
+    const share = duration * (weights[index] / totalWeight);
+    const end = isLast ? duration : Math.min(duration, cursor + share);
+    const timedSegment = {
+      ...segment,
+      start: cursor,
+      end: Math.max(end, cursor + 0.001),
+    };
+    cursor = timedSegment.end;
+    return timedSegment;
+  });
+}
+
+function findActiveSegmentIndex(segments: TranscriptSegment[], currentTime: number): number {
+  const activeIndex = segments.findIndex((segment) => currentTime >= segment.start && currentTime < segment.end);
+  if (activeIndex >= 0) return activeIndex;
+
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (currentTime >= segments[index].start) return index;
+  }
+  return -1;
+}
+
+function formatTimecode(seconds: number): string {
+  const totalMilliseconds = Math.max(0, Math.round(seconds * 1000));
+  const hours = Math.floor(totalMilliseconds / 3_600_000);
+  const minutes = Math.floor((totalMilliseconds % 3_600_000) / 60_000);
+  const wholeSeconds = Math.floor((totalMilliseconds % 60_000) / 1000);
+  const milliseconds = totalMilliseconds % 1000;
+
+  return [
+    hours.toString().padStart(2, "0"),
+    minutes.toString().padStart(2, "0"),
+    wholeSeconds.toString().padStart(2, "0"),
+  ].join(":") + `.${milliseconds.toString().padStart(3, "0")}`;
 }

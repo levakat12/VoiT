@@ -354,6 +354,14 @@ p,
   background: rgba(255, 255, 255, 0.12);
 }
 
+.exportButton.active {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 0 24px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
 .uploadButton:hover,
 .uploadButton:focus-within,
 .uploadActionButton:hover,
@@ -622,6 +630,131 @@ p,
   z-index: 1;
 }
 
+.timecodePanel {
+  position: absolute;
+  inset: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-rows: minmax(172px, 36%) minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.captionPlayer {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 46%),
+    rgba(5, 5, 6, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mediaPreview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 172px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.audioPreview {
+  width: 100%;
+  height: 100%;
+  min-height: 172px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)),
+    rgba(0, 0, 0, 0.42);
+}
+
+.audioPreview audio {
+  width: min(100%, 560px);
+}
+
+.captionOverlay {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  width: min(86%, 760px);
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #ffffff;
+  font-size: clamp(14px, 1.15vw, 18px);
+  font-weight: 620;
+  line-height: 1.45;
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.72);
+  box-shadow:
+    0 10px 34px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+.timecodeList {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  color: #f1f1f1;
+}
+
+.timecodeSegment {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.018)),
+    rgba(10, 10, 11, 0.36);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(16px) saturate(1.12);
+  -webkit-backdrop-filter: blur(16px) saturate(1.12);
+}
+
+.timecodeRange {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: rgba(245, 245, 245, 0.72);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.timecodeSegment p {
+  color: rgba(245, 245, 245, 0.9);
+  font-size: clamp(14px, 0.95vw, 16px);
+  line-height: 1.55;
+}
+
+.timecodeSegment.active {
+  border-color: rgba(255, 255, 255, 0.44);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.032)),
+    rgba(16, 16, 18, 0.5);
+  box-shadow:
+    0 0 30px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }
@@ -673,5 +806,17 @@ p,
   .exportSelect,
   .saveButton {
     flex: 1;
+  }
+
+  .timecodeSegment {
+    grid-template-columns: 1fr;
+  }
+
+  .timecodeRange {
+    flex-direction: row;
+  }
+
+  .timecodePanel {
+    grid-template-rows: minmax(150px, auto) minmax(260px, 1fr);
   }
 }

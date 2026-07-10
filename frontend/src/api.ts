@@ -106,3 +106,7 @@ export function saveTranscript(
 export function exportUrl(id: number, format: string): string {
   return `${API_BASE_URL}/jobs/${id}/exports/${format}`;
 }
+
+export function mediaUrl(id: number): string {
+  return `${API_BASE_URL}/jobs/${id}/media`;
+}

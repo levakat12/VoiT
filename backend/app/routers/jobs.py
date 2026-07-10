@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -500,6 +500,21 @@ def get_job(job_id: int, db: Session = Depends(get_db)) -> JobRead:
     return _job_to_schema(job)
 
 
+@router.get("/jobs/{job_id}/media")
+def get_job_media(
+    job_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    job = db.get(TranscriptJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Transcript job not found.")
+
+    media_path = _job_media_path(job, settings)
+    media_type = job.media_type or mimetypes.guess_type(media_path.name)[0] or "application/octet-stream"
+    return FileResponse(media_path, media_type=media_type, filename=job.filename, content_disposition_type="inline")
+
+
 @router.get("/jobs/{job_id}/insights", response_model=TranscriptInsights)
 def get_transcript_insights(job_id: int, db: Session = Depends(get_db)) -> TranscriptInsights:
     return _build_transcript_insights_response(job_id, db)
@@ -891,6 +906,20 @@ def _delete_job_files(job: TranscriptJob, settings: Settings) -> None:
             continue
         if storage_root in resolved.parents and resolved.is_file():
             resolved.unlink(missing_ok=True)
+
+
+def _job_media_path(job: TranscriptJob, settings: Settings) -> Path:
+    storage_root = settings.storage_dir.resolve()
+    try:
+        resolved = Path(job.file_path).resolve()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Media file not found.") from exc
+
+    if storage_root != resolved and storage_root not in resolved.parents:
+        raise HTTPException(status_code=403, detail="Media file is outside storage.")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Media file not found.")
+    return resolved
 
 
 def _set_progress(
